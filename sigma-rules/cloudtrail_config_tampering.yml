@@ -1,0 +1,33 @@
+title: AWS Logging Or Detection Tampering
+id: a1c0de01-0005-4000-9000-0000000000c5
+status: experimental
+description: >
+  Detects disabling/deletion of audit + detection sources (CloudTrail, Config, VPC Flow Logs,
+  GuardDuty delegated admin). Near-zero base rate in a steady environment. See
+  chokepoints/defense-evasion/cloudtrail-config-tampering.yml.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1562/008/
+author: AWS Detection Chokepoints
+date: 2026/07/03
+tags:
+  - attack.defense-evasion
+  - attack.t1562.008
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventName:
+      - StopLogging
+      - DeleteTrail
+      - PutEventSelectors
+      - StopConfigurationRecorder
+      - DeleteDeliveryChannel
+      - DeleteFlowLogs
+      - DisassociateFromAdministratorAccount
+  condition: selection
+falsepositives:
+  - IaC-managed trail/recorder lifecycle (allowlist the deployer role from baseline)
+  - Legitimate PutEventSelectors config changes that do NOT weaken coverage
+level: high

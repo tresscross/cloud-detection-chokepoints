@@ -1,0 +1,66 @@
+id: iam-privileged-policy-attach
+name: Privileged managed-policy attached to a user or role
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: HIGH
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An identity with iam:AttachUserPolicy / iam:AttachRolePolicy binds an admin-equivalent
+    AWS-managed policy (AdministratorAccess, PowerUserAccess, IAMFullAccess, or any
+    arn:aws:iam::aws:policy/Admin*) to a principal the attacker controls, escalating that
+    principal to admin.
+  preconditions: >
+    A credential holding iam:Attach*Policy on the target user/role.
+  attacker_controls: [user agent, source IP, tool, timing, target user/role name]
+  invariant: >
+    eventName is AttachUserPolicy or AttachRolePolicy and requestParameters.policyArn is a
+    privileged AWS-managed policy. The remediation policy AWSCompromisedKeyQuarantine* is
+    the one benign exception and must be excluded.
+  event_names: [AttachUserPolicy, AttachRolePolicy]
+
+observability:
+  status: OBSERVABLE
+  cloudtrail_event_category: Management
+  signal_field: requestParameters.policyArn
+  ingestion_notes: >
+    policyArn is typically lifted to a top-level parsed field. AWS service-linked roles
+    (AWSServiceRoleFor*) legitimately attach managed policies during permission-set
+    provisioning — exclude them (an attacker cannot assume a service-linked role).
+
+detection:
+  research:
+    logic: "eventName in (AttachUserPolicy, AttachRolePolicy) — every occurrence."
+    fp_rate: high
+  hunt:
+    logic: >
+      As research, success only, where policyArn matches
+      /AdministratorAccess|PowerUserAccess|IAMFullAccess|:policy\/Admin/; group by the
+      underlying role (sessionIssuer.userName).
+    fp_rate: medium
+  analyst:
+    logic: >
+      As hunt, excluding AWSCompromisedKeyQuarantine* and service-linked roles
+      (actor matches /^AWSServiceRoleFor/). Alert on any remaining privileged attach.
+    fp_rate: low
+    severity: HIGH
+
+variations:
+  - AttachGroupPolicy (privileged policy to an IAM group)
+  - CreatePolicyVersion / PutRolePolicy / PutUserPolicy (grant admin without attaching a managed policy)
+
+evolution_timeline:
+  - "Stable primitive; the managed-policy ARNs (AdministratorAccess etc.) are AWS-defined and unchanging."
+
+raw_logs:
+  - "eventName=AttachRolePolicy, requestParameters.policyArn=arn:aws:iam::aws:policy/AdministratorAccess, requestParameters.roleName=<role> (redacted)."
+
+related:
+  - iam-create-policy-version
+  - iam-inline-policy-self-escalation
+
+references:
+  - "MITRE ATT&CK T1098.003 — Additional Cloud Roles"
+  - "Threat intel [INCIDENT]: AMBERSQUID + exposed-.env extortion attached AdministratorAccess; GuardDuty campaign attached AmazonSESFullAccess (Sysdig/Unit 42/AWS, 2023-2025) — see trends/aws-chokepoint-convergence.md"

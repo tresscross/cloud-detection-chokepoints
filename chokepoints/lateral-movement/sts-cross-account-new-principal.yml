@@ -1,0 +1,65 @@
+id: sts-cross-account-new-principal
+name: Cross-account AssumeRole from a new external principal
+tactic: lateral-movement
+attack_technique: [T1550.001]
+priority: MEDIUM
+prevalence: HIGH
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    An attacker pivots between accounts via sts:AssumeRole. AssumeRole can be the large
+    majority of CloudTrail volume, so a bare match is unshippable. The invariant that
+    survives tool rotation is the (caller-account -> target-role) PRINCIPAL PAIR: lateral
+    movement produces a pairing the baseline has never seen — especially a caller account
+    outside the organisation.
+  preconditions: >
+    Control of a principal in one account with sts:AssumeRole permission on a role in another.
+  attacker_controls: [user agent, source IP, tool, timing, role session name]
+  invariant: >
+    eventName=AssumeRole where the calling account differs from the resource-owning account
+    AND the caller account (or the caller->role pair) is new versus the baseline. Detect the
+    NEW pair / NEW external caller, never the event.
+  event_names: [AssumeRole]
+
+observability:
+  status: OBSERVABLE
+  cloudtrail_event_category: Management
+  signal_field: userIdentity.accountId vs recipientAccountId; resources[].ARN (target role)
+  ingestion_notes: >
+    FOOTGUN — "userIdentity.accountId != recipientAccountId" in many query languages
+    compares the field to the LITERAL STRING of the other field name and matches every
+    event. Use an explicit field-to-field comparison function. External SaaS integrations
+    (CSPM, backup) assume cross-account at high volume — allowlist them from baseline.
+
+detection:
+  research:
+    logic: "AssumeRole where caller account != resource account (real field comparison)."
+    fp_rate: high
+  hunt:
+    logic: "Profile (caller-account, target-role) pairs; rarest pairs first — the long tail is the signal."
+    fp_rate: medium
+  analyst:
+    logic: >
+      Cross-account AssumeRole where the caller account is not in your org list and not in
+      your known-external-integration allowlist. (Hunt variant: pair unseen in a 30-day
+      baseline lookup.)
+    fp_rate: low
+    severity: MEDIUM
+
+variations:
+  - AssumeRoleWithWebIdentity / AssumeRoleWithSAML (federated pivots)
+  - Role chaining (assumed role assuming another role)
+
+evolution_timeline:
+  - "Cross-account pivoting is core to multi-account cloud intrusions; the API is stable."
+
+raw_logs:
+  - "eventName=AssumeRole, userIdentity.accountId=210987654321, recipientAccountId=123456789012, resources[].ARN=arn:aws:iam::123456789012:role/<role> (redacted)."
+
+related:
+  - iam-role-trust-external-principal
+
+references:
+  - "MITRE ATT&CK T1550.001 — Use Alternate Authentication Material: Application Access Token"
+  - "Threat intel [AGGREGATE]: No clean incident (documented pivots used static keys, not AssumeRole); Unit 42 impossible-travel +116% covers the anomaly class (2025) — see trends/aws-chokepoint-convergence.md"

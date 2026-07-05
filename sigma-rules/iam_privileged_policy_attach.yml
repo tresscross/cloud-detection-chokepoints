@@ -1,0 +1,39 @@
+title: AWS Privileged Managed Policy Attached To User Or Role
+id: a1c0de01-0002-4000-9000-0000000000c2
+status: experimental
+description: >
+  Detects iam:AttachUserPolicy / iam:AttachRolePolicy binding an admin-equivalent AWS-managed
+  policy (AdministratorAccess, PowerUserAccess, IAMFullAccess, Admin*). Excludes the
+  remediation policy AWSCompromisedKeyQuarantine and AWS service-linked roles. See
+  chokepoints/privilege-escalation/iam-privileged-policy-attach.yml.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1098/003/
+author: AWS Detection Chokepoints
+date: 2026/07/03
+tags:
+  - attack.privilege-escalation
+  - attack.t1098.003
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: iam.amazonaws.com
+    eventName:
+      - AttachUserPolicy
+      - AttachRolePolicy
+  selection_privileged:
+    requestParameters.policyArn|contains:
+      - 'AdministratorAccess'
+      - 'PowerUserAccess'
+      - 'IAMFullAccess'
+      - ':policy/Admin'
+  filter_quarantine:
+    requestParameters.policyArn|contains: 'AWSCompromisedKeyQuarantine'
+  filter_slr:
+    userIdentity.sessionContext.sessionIssuer.userName|startswith: 'AWSServiceRoleFor'
+  condition: selection and selection_privileged and not filter_quarantine and not filter_slr
+falsepositives:
+  - Break-glass admin provisioning by a known IaC role (allowlist from baseline)
+level: high

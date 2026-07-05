@@ -1,0 +1,35 @@
+title: AWS KMS Key Sabotage
+id: a1c0de01-0004-4000-9000-0000000000c4
+status: experimental
+description: >
+  Detects KMS key destruction/disable (DisableKey, ScheduleKeyDeletion) or key-policy
+  rewrite (PutKeyPolicy) by a real caller. Excludes service-invoked calls. Analyst tier
+  additionally gates PutKeyPolicy to a public/external grant — see
+  chokepoints/defense-evasion/kms-key-sabotage.yml.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1485/
+author: AWS Detection Chokepoints
+date: 2026/07/03
+tags:
+  - attack.defense-evasion
+  - attack.impact
+  - attack.t1485
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: kms.amazonaws.com
+    eventName:
+      - DisableKey
+      - ScheduleKeyDeletion
+      - PutKeyPolicy
+  filter_service:
+    userIdentity.invokedBy|endswith: '.amazonaws.com'
+  filter_slr:
+    userIdentity.sessionContext.sessionIssuer.userName|startswith: 'AWSServiceRoleFor'
+  condition: selection and not filter_service and not filter_slr
+falsepositives:
+  - Planned key rotation/retirement by a known operations role (allowlist from baseline)
+level: high

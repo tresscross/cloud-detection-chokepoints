@@ -1,0 +1,35 @@
+title: AWS Federation Identity Provider Created Or Modified
+id: a1c0de01-0003-4000-9000-0000000000c3
+status: experimental
+description: >
+  Detects creation/modification of a SAML or OIDC identity provider in IAM — a durable
+  federation backdoor. Excludes AWS service-linked roles that perform routine SAML-provider
+  maintenance. Near-zero base rate. See chokepoints/persistence/iam-federation-idp-created.yml.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1556/007/
+author: AWS Detection Chokepoints
+date: 2026/07/03
+tags:
+  - attack.persistence
+  - attack.t1556.007
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: iam.amazonaws.com
+    eventName:
+      - CreateSAMLProvider
+      - UpdateSAMLProvider
+      - CreateOpenIDConnectProvider
+      - UpdateOpenIDConnectProviderThumbprint
+      - AddClientIDToOpenIDConnectProvider
+      - DeleteSAMLProvider
+      - DeleteOpenIDConnectProvider
+  filter_slr:
+    userIdentity.sessionContext.sessionIssuer.userName|startswith: 'AWSServiceRoleFor'
+  condition: selection and not filter_slr
+falsepositives:
+  - Deliberate SSO/federation onboarding by an admin (rare; confirm it was expected)
+level: high

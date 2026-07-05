@@ -1,0 +1,28 @@
+title: AWS Console Login By IAM User Without MFA
+id: a1c0de01-0006-4000-9000-0000000000c6
+status: experimental
+description: >
+  Detects a direct IAM-user console sign-in where MFA was not used. SSO/federated logins show
+  MFAUsed=No because MFA is enforced at the IdP — this rule scopes to userIdentity.type=IAMUser
+  to avoid that false-positive class. Pair with a foreign-geo variant. See
+  chokepoints/initial-access/console-login-anomaly.yml. CONFIRM console sign-ins are forwarded.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1078/004/
+author: AWS Detection Chokepoints
+date: 2026/07/03
+tags:
+  - attack.initial-access
+  - attack.t1078.004
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventName: ConsoleLogin
+    userIdentity.type: IAMUser
+    additionalEventData.MFAUsed: 'No'
+  condition: selection
+falsepositives:
+  - Break-glass IAM users pending migration to SSO (should be tracked and time-boxed)
+level: high
