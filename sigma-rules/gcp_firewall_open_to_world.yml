@@ -1,0 +1,28 @@
+title: GCP Firewall Opened To The Internet
+id: b2c0de02-0005-4000-9000-0000000000d5
+status: experimental
+description: >
+  Detects a Compute Engine firewall rule created/patched allowing ingress from 0.0.0.0/0, by a
+  principal other than the GKE control-plane robot (which legitimately manages world-open rules).
+  See chokepoints/gcp/defense-evasion.yml (CP-GCP-DE-05).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1562/007/
+author: Cloud Detection Chokepoints
+date: 2026/07/05
+tags:
+  - attack.defense-evasion
+  - attack.t1562.007
+logsource:
+  product: gcp
+  service: gcp.audit
+detection:
+  selection:
+    data.protoPayload.methodName|re: 'compute\.firewalls\.(insert|patch)'
+    data.protoPayload.request.sourceRanges|contains: '0.0.0.0/0'
+  filter_gke:
+    data.protoPayload.authenticationInfo.principalEmail|contains: 'container-engine-robot'
+  condition: selection and not filter_gke
+falsepositives:
+  - Intentionally public services fronted by a load balancer (scope to sensitive ports; allowlist)
+level: low

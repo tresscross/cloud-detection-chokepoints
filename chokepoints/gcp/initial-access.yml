@@ -1,0 +1,48 @@
+# GCP detection chokepoints — Initial Access (TA0001)
+# Schema: reference/chokepoints-methodology.md. Scope queries with #Vendor=gcp.
+
+- id: CP-GCP-IA-01
+  name: Valid cloud account / stolen credential used against the control plane
+  tactic: Initial Access (TA0001)   # also Persistence/Priv-Esc/Lateral
+  technique: [T1078.004]            # Valid Accounts: Cloud Accounts
+  priority: CRITICAL
+  prevalence: VERY HIGH
+  detection_difficulty: HIGH
+  invariant: >
+    Every cloud intrusion must authenticate with some valid principal — a user
+    OAuth2 session, a service-account key, or an impersonated token. The auth
+    event is unavoidable even when the credential is legitimate.
+  observable:
+    # First control-plane call by the principal is the anchor; there is no single
+    # "login" methodName in project Cloud Audit Logs for OAuth/console sign-in.
+    method_names: ["<any first-seen methodName for the principal>"]
+    service_name: "<varies>"
+    audit_log_class: ADMIN_ACTIVITY   # for API calls; console/OAuth sign-in is elsewhere (see caveat)
+    fields:
+      - protoPayload.authenticationInfo.principalEmail
+      - protoPayload.requestMetadata.callerIp
+      - protoPayload.requestMetadata.callerSuppliedUserAgent
+  narrowing_invariant: >
+    New principal+callerIp pairing; impossible travel within a session; a
+    previously-dormant service account suddenly active; callerIp outside known
+    corporate/Google egress; callerSuppliedUserAgent indicating an offensive tool.
+  tool_variations:
+    - Stratus gcp.initial-access.use-compute-sa-outside-gcp (GCE default SA token
+      exfiltrated from metadata service and used off-GCP; shows as Admin Activity
+      from a non-Google IP).
+    - Stealer malware harvesting gcloud/Docker/K8s credential files (TeamTNT).
+    - AiTM phishing kits stealing OAuth session tokens (Scattered Spider 2025).
+  actors:
+    - "Scattered Spider / UNC3944 (vishing + AiTM MFA bypass; GCP a named target/exfil dest)"
+    - "TeamTNT-linked stealers (harvest GCP creds from config files)"
+  observability_status: PARTIAL
+  observability_note: >
+    OBSERVABILITY GAP — interactive console / OAuth sign-in events live in
+    Google Workspace / Cloud Identity audit logs, NOT in project Cloud Audit
+    Logs. Confirm that source is also forwarded to NG-SIEM; without it, only the
+    first *API* call is visible, not the sign-in.
+  detection_maturity: research      # sev 30 monitoring baseline
+  references:
+    - https://cloud.google.com/blog/topics/threat-intelligence/unc3944-targets-saas-applications
+    - https://attack.mitre.org/techniques/T1078/004/
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.initial-access.use-compute-sa-outside-gcp/

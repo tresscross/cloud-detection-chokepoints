@@ -1,0 +1,156 @@
+# GCP detection chokepoints — Defense Evasion (TA0005)
+# Schema: reference/chokepoints-methodology.md. Scope queries with #Vendor=gcp.
+#
+# MITRE v19 NOTE (released 2026-04-28): T1562 "Impair Defenses" was elevated to a
+# new tactic, Impair Defenses (TA0112); classic Defense Evasion keeps TA0005 as
+# "Stealth". Tooling still widely cites the pre-v19 IDs (T1562.008 etc.), which we
+# retain below. Re-map to TA0112 before hard-coding tactic IDs in production rules.
+#
+# GTIG H2 2025: all major ransomware gangs now delete logs, core dumps, and
+# backups — anti-forensics is standard, making these chokepoints high-value.
+# Good news: log-tampering mutations are ALWAYS-ON Admin Activity.
+
+- id: CP-GCP-DE-01
+  name: Logging sink deletion or disable
+  tactic: Defense Evasion (TA0005 / v19 TA0112)
+  technique: [T1562.008]
+  priority: CRITICAL
+  prevalence: MEDIUM
+  detection_difficulty: LOW
+  invariant: >
+    To stop log export to a SIEM/bucket, an attacker deletes or disables the log
+    sink. The sink mutation is itself logged in Admin Activity.
+  observable:
+    method_names:
+      - google.logging.v2.ConfigServiceV2.DeleteSink
+      - google.logging.v2.ConfigServiceV2.UpdateSink   # with disabled=true
+    service_name: logging.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY   # always on
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName, protoPayload.request.sink.disabled]
+  narrowing_invariant: >
+    Any delete, or UpdateSink setting disabled=true, on an org/prod aggregated or
+    security sink. Near-zero legitimate rate — alert on all.
+  tool_variations:
+    - Stratus gcp.defense-evasion.delete-logging-sink
+    - Stratus gcp.defense-evasion.disable-logging-sink
+  actors: ["Ransomware crews broadly (GTIG H2 2025)"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: confirmed
+  references:
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.delete-logging-sink/
+    - https://attack.mitre.org/techniques/T1562/008/
+
+- id: CP-GCP-DE-02
+  name: Log bucket deletion / retention reduction
+  tactic: Defense Evasion (TA0005 / v19 TA0112)
+  technique: [T1562.008]             # + T1485 destruction
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: LOW
+  invariant: >
+    Destroying already-written logs means deleting the log bucket or slashing its
+    retention/lifecycle. Both are logged Admin Activity mutations.
+  observable:
+    method_names:
+      - google.logging.v2.ConfigServiceV2.DeleteBucket
+      - google.logging.v2.ConfigServiceV2.UpdateBucket
+      - storage.buckets.update        # 1-day GCS lifecycle on the sink's bucket
+    service_name: [logging.googleapis.com, storage.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName]
+  narrowing_invariant: >
+    Retention reduced to a very short window, or delete of a log/_Required bucket;
+    GCS lifecycle rule set to age=1 day on a sink-target bucket.
+  tool_variations: [Stratus gcp.defense-evasion.reduce-sink-log-retention]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: DeleteBucket/UpdateBucket confirmed; UpdateBucketAsync secondary
+  references:
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.reduce-sink-log-retention/
+
+- id: CP-GCP-DE-03
+  name: Audit logging disabled via IAM auditConfig change
+  tactic: Defense Evasion (TA0005 / v19 TA0112)
+  technique: [T1562.008]
+  priority: HIGH
+  prevalence: LOW
+  detection_difficulty: HIGH
+  invariant: >
+    Turning off Data Access / audit logging for a service is done by editing the
+    IAM policy auditConfigs via SetIamPolicy.
+  observable:
+    method_names: [SetIamPolicy]
+    service_name: cloudresourcemanager.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.serviceData.policyDelta.auditConfigDeltas]   # deprecated - see caveat
+  narrowing_invariant: >
+    SetIamPolicy whose delta removes/reduces auditConfigs (e.g. drops ADMIN_READ/
+    DATA_READ for a service such as storage.googleapis.com).
+  tool_variations: [Stratus gcp.defense-evasion.disable-audit-logs]
+  observability_status: OBSERVABLE
+  observability_note: >
+    DETECTION GAP — auditConfigDeltas lived in the deprecated protoPayload.serviceData
+    and is frequently EMPTY/DROPPED in exported logs; enable vs disable are the
+    same SetIamPolicy call. A SIEM on exported logs may not distinguish direction.
+    Validate against a live sample; prefer protoPayload.metadata.
+  detection_maturity: research
+  methodname_confidence: methodName confirmed; delta-field reliability POOR on exported logs
+  references:
+    - https://permiso.io/blog/gcp-servicedata-officially-deprecated-actively-dangerous
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.disable-audit-logs/
+
+- id: CP-GCP-DE-04
+  name: Telemetry disabled — VPC Flow Logs / DNS logging / project detach
+  tactic: Defense Evasion (TA0005 / v19 TA0112)
+  technique: [T1562.008, T1562.007]
+  priority: MEDIUM
+  prevalence: LOW
+  detection_difficulty: MEDIUM
+  invariant: >
+    Blinding network/DNS telemetry, or escaping org-level policy+sinks, requires
+    a specific config mutation, all logged in Admin Activity.
+  observable:
+    method_names:
+      - v1.compute.subnetworks.patch    # logConfig.enable=false (VPC Flow Logs off)
+      - dns.policies.delete             # delete DNS query-logging policy
+      - google.cloud.resourcemanager.v3.Projects.MoveProject  # detach from org
+    service_name: [compute.googleapis.com, dns.googleapis.com, cloudresourcemanager.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName]
+  narrowing_invariant: >
+    subnetworks.patch disabling logConfig; DNS logging policy deleted; MoveProject
+    out of the org (escapes org sinks/policies).
+  tool_variations:
+    - Stratus gcp.defense-evasion.remove-vpc-flow-logs
+    - Stratus gcp.defense-evasion.delete-dns-logs
+    - Stratus gcp.defense-evasion.remove-project-from-organization
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: confirmed (Stratus source)
+  references:
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.remove-vpc-flow-logs/
+
+- id: CP-GCP-DE-05
+  name: Firewall opened to the world
+  tactic: Defense Evasion (TA0005)   # supports Initial Access / lateral
+  technique: [T1562.007]
+  priority: MEDIUM
+  prevalence: MEDIUM
+  detection_difficulty: LOW
+  invariant: >
+    Exposing a service to the internet requires inserting/patching a firewall
+    rule with a 0.0.0.0/0 source range.
+  observable:
+    method_names: [v1.compute.firewalls.insert, v1.compute.firewalls.patch]
+    service_name: compute.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.sourceRanges, protoPayload.request.allowed]
+  narrowing_invariant: >
+    sourceRanges contains 0.0.0.0/0 AND allowed ports include sensitive services
+    (22/3389/all); rule created by an unusual principal.
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: firewalls.insert confirmed by convention; patch VALIDATE
+  references:
+    - https://www.sysdig.com/blog/suspicious-activity-gcp-audit-logs

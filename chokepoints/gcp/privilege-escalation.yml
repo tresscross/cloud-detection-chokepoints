@@ -1,0 +1,219 @@
+# GCP detection chokepoints — Privilege Escalation (TA0004)
+# Schema: reference/chokepoints-methodology.md. Scope queries with #Vendor=gcp.
+#
+# The finite GCP IAM priv-esc mutation set (Rhino GCP-IAM-Privilege-Escalation).
+# Two structural facts drive detection:
+#   * SetIamPolicy is the universal direct-grant choke (bindingDeltas carry the
+#     exact member+role); it is ALWAYS-ON Admin Activity.
+#   * iam.serviceAccounts.actAs has NO methodName of its own — it is only visible
+#     via the host resource-creation event with the attached SA inspected.
+#     Deployment Manager and Cloud Build bypass actAs by running as a default
+#     Editor-privileged agent, so mere possession/use of those create rights by a
+#     low-priv principal is itself the finding.
+
+- id: CP-GCP-PE-01
+  name: setIamPolicy self-grant / external grant at project / folder / org
+  tactic: Privilege Escalation (TA0004)   # also Persistence T1098.003
+  technique: [T1098.003]
+  priority: CRITICAL
+  prevalence: HIGH
+  detection_difficulty: LOW
+  invariant: >
+    Granting a role to a principal must call setIamPolicy on the target resource.
+    The binding delta records exactly who was granted which role.
+  observable:
+    method_names: [SetIamPolicy]
+    service_name: cloudresourcemanager.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY   # always on
+    fields:
+      - protoPayload.authenticationInfo.principalEmail
+      - protoPayload.serviceData.policyDelta.bindingDeltas    # deprecated - prefer metadata; see caveat
+      - protoPayload.resourceName
+  narrowing_invariant: >
+    bindingDeltas action=ADD of the CALLER themselves (self-grant), an external
+    domain / gmail.com principal, or allUsers/allAuthenticatedUsers, to a
+    privileged role (roles/owner, roles/editor, roles/iam.serviceAccountTokenCreator,
+    roles/iam.securityAdmin, roles/resourcemanager.*Admin).
+  tool_variations:
+    - "gcloud <res> add-iam-policy-binding"
+    - Stratus gcp.persistence.invite-external-user (grants roles/editor to external user)
+  actors: ["UNC4899 (new admin binding in CI/CD escalation)", "Scattered Spider/LUCR-3 (role/identity manipulation)"]
+  observability_status: OBSERVABLE
+  observability_note: >
+    CAVEAT — the binding detail historically lived in protoPayload.serviceData
+    (deprecated) and is frequently DROPPED from exported logs. Prefer
+    protoPayload.metadata where present; treat serviceData-only rules as unreliable
+    on exported logs (validate against a live sample).
+  detection_maturity: research      # sev 30
+  methodname_confidence: confirmed
+  references:
+    - https://securitylabs.datadoghq.com/cloud-security-atlas/attacks/backdooring-service-account/
+    - https://attack.mitre.org/techniques/T1098/003/
+
+- id: CP-GCP-PE-02
+  name: Backdoor a service account via its IAM policy (grant TokenCreator)
+  tactic: Privilege Escalation (TA0004)   # also Persistence
+  technique: [T1098.003]
+  priority: CRITICAL
+  prevalence: HIGH
+  detection_difficulty: LOW
+  invariant: >
+    To be able to impersonate a specific SA, an attacker grants themselves
+    serviceAccountTokenCreator on that SA — a setIamPolicy on the SA resource.
+  observable:
+    method_names: [google.iam.admin.v1.SetIAMPolicy]   # note capitalization SetIAMPolicy
+    service_name: iam.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName, protoPayload.serviceData.policyDelta.bindingDeltas]
+  narrowing_invariant: >
+    ADD of roles/iam.serviceAccountTokenCreator (or serviceAccountUser) to an
+    external / new / self principal on a SA — especially a high-priv or default SA.
+  tool_variations: [Stratus gcp.persistence.backdoor-service-account-policy]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: confirmed (Datadog)
+  references:
+    - https://securitylabs.datadoghq.com/cloud-security-atlas/attacks/backdooring-service-account/
+
+- id: CP-GCP-PE-03
+  name: Attach a privileged service account to a new resource (actAs / PassRole-analog)
+  tactic: Privilege Escalation (TA0004)
+  technique: [T1078.004]
+  priority: CRITICAL
+  prevalence: HIGH
+  detection_difficulty: HIGH
+  invariant: >
+    To use a more-privileged SA, an attacker attaches it (actAs) to a resource
+    they create and reads its token from the runtime/metadata. actAs itself emits
+    no event — the create call is the observable choke.
+  observable:
+    method_names:
+      - v1.compute.instances.insert
+      - google.cloud.functions.v1.CloudFunctionsService.CreateFunction
+      - google.cloud.functions.v2.FunctionService.CreateFunction
+      - google.cloud.run.v1.Services.CreateService
+      - google.cloud.run.v1.Services.ReplaceService
+      - google.cloud.scheduler.v1.CloudScheduler.CreateJob   # VALIDATE
+    service_name: [compute.googleapis.com, cloudfunctions.googleapis.com, run.googleapis.com, cloudscheduler.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY   # always on
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.*.serviceAccount, protoPayload.resourceName]
+  narrowing_invariant: >
+    The created resource's attached serviceAccount is higher-privileged than the
+    creator (or is the default compute/appengine Editor SA), AND the creator does
+    not normally deploy that resource type. Correlate create -> token use.
+  tool_variations:
+    - "GCPloit / GCP-IAM-Privilege-Escalation actAs paths (functions/run/compute/scheduler)"
+    - "Tenable ImageRunner (Cloud Run ReplaceService + actAs)"
+  observability_status: OBSERVABLE
+  observability_note: Composite — needs create event + attached-SA privilege comparison; actAs has no standalone log.
+  detection_maturity: research
+  methodname_confidence: create methodNames confirmed except scheduler (VALIDATE)
+  references:
+    - https://www.tenable.com/blog/imagerunner-a-privilege-escalation-vulnerability-impacting-gcp-cloud-run
+    - https://www.praetorian.com/blog/google-cloud-platform-gcp-service-account-based-privilege-escalation-paths/
+
+- id: CP-GCP-PE-04
+  name: actAs-bypass via Deployment Manager / Cloud Build default agent
+  tactic: Privilege Escalation (TA0004)
+  technique: [T1078.004]
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: MEDIUM
+  invariant: >
+    Deployment Manager runs as <project-number>@cloudservices.gserviceaccount.com
+    (Editor by default) and Cloud Build as <project-number>@cloudbuild.gserviceaccount.com;
+    neither checks actAs. So creating a deployment/build lets a low-priv principal
+    act with the Editor-privileged agent.
+  observable:
+    method_names: [v2.deploymentmanager.deployments.insert, google.devtools.cloudbuild.v1.CloudBuild.CreateBuild]
+    service_name: [deploymentmanager.googleapis.com, cloudbuild.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.*]
+  narrowing_invariant: >
+    deployments.insert / CreateBuild by an unusual (non-CI, non-automation)
+    principal, or whose config provisions IAM bindings / reads the metadata
+    server / exfils a token. Because actAs is not required, mere use by a low-priv
+    principal is the finding.
+  tool_variations: ["Rhino Cloud Build RCE->IAM escalation", "deploymentmanager.deployments.create privesc"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: CreateBuild confirmed; deployments.insert single-source (VALIDATE)
+  references:
+    - https://rhinosecuritylabs.com/gcp/iam-privilege-escalation-gcp-cloudbuild/
+    - https://rhinosecuritylabs.com/gcp/privilege-escalation-google-cloud-platform-part-1/
+
+- id: CP-GCP-PE-05
+  name: Compute instance created with startup-script + attached SA
+  tactic: Privilege Escalation (TA0004)
+  technique: [T1078.004]             # + T1059 execution
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: MEDIUM
+  invariant: >
+    A VM created with (or patched to add) a startup-script metadata key AND an
+    attached SA runs attacker code with that SA's credentials on first boot.
+  observable:
+    method_names: [v1.compute.instances.insert, v1.compute.instances.setMetadata]  # setMetadata VALIDATE
+    service_name: compute.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.serviceAccounts, protoPayload.request.metadata]
+  narrowing_invariant: >
+    Request contains a startup-script metadata item AND a non-default/privileged
+    serviceAccounts[].email with broad scopes (cloud-platform); unusual zone;
+    creator who does not normally deploy compute.
+  tool_variations: ["gcloud compute instances create --metadata startup-script=..."]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: instances.insert confirmed; setMetadata VALIDATE
+  references:
+    - https://rhinosecuritylabs.com/gcp/privilege-escalation-google-cloud-platform-part-1/
+
+- id: CP-GCP-PE-06
+  name: Custom role updated to add privileges
+  tactic: Privilege Escalation (TA0004)
+  technique: [T1098.003]
+  priority: MEDIUM
+  prevalence: LOW
+  detection_difficulty: MEDIUM
+  invariant: >
+    An attacker holding a custom role and iam.roles.update can add permissions to
+    that role, escalating without any new binding.
+  observable:
+    method_names: [google.iam.admin.v1.UpdateRole]   # VALIDATE
+    service_name: iam.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.role.includedPermissions]
+  narrowing_invariant: >
+    includedPermissions expands to add *.setIamPolicy, iam.serviceAccounts.actAs,
+    or iam.serviceAccountKeys.create — while the editor is bound to that role.
+  tool_variations: ["gcloud iam roles update"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: VALIDATE (assumed FQ form)
+  references:
+    - https://github.com/RhinoSecurityLabs/GCP-IAM-Privilege-Escalation
+
+- id: CP-GCP-PE-07
+  name: Org policy constraint weakened to enable other primitives
+  tactic: Privilege Escalation (TA0004)   # also Defense Evasion
+  technique: [T1484, T1562]
+  priority: HIGH
+  prevalence: LOW
+  detection_difficulty: MEDIUM
+  invariant: >
+    To lift a guardrail (e.g. disable the SA-key-creation constraint, or allow
+    external members), an attacker must set/modify an org policy constraint.
+  observable:
+    method_names: [SetOrgPolicy, google.cloud.orgpolicy.v2.OrgPolicy.UpdatePolicy]  # VALIDATE
+    service_name: [orgpolicy.googleapis.com, cloudresourcemanager.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName]
+  narrowing_invariant: >
+    Weakening of iam.disableServiceAccountKeyCreation or
+    constraints/iam.allowedPolicyMemberDomains; correlate with subsequent key
+    creation or external-member SetIamPolicy.
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: bare SetOrgPolicy plausible; FQ form VALIDATE
+  references:
+    - https://github.com/RhinoSecurityLabs/GCP-IAM-Privilege-Escalation

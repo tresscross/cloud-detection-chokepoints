@@ -1,0 +1,28 @@
+title: GCP Logging Bucket Deleted Or Modified
+id: b2c0de02-0004-4000-9000-0000000000d4
+status: experimental
+description: >
+  Detects deletion or modification of a Cloud Logging bucket — destroying stored audit history
+  or reducing retention (anti-forensics / data destruction). See
+  chokepoints/gcp/defense-evasion.yml (CP-GCP-DE-02).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1562/008/
+author: Cloud Detection Chokepoints
+date: 2026/07/05
+tags:
+  - attack.defense-evasion
+  - attack.t1562.008
+logsource:
+  product: gcp
+  service: gcp.audit
+detection:
+  selection:
+    data.protoPayload.methodName:
+      - google.logging.v2.ConfigServiceV2.DeleteBucket
+      - google.logging.v2.ConfigServiceV2.UpdateBucket
+      - google.logging.v2.ConfigServiceV2.UpdateBucketAsync
+  condition: selection
+falsepositives:
+  - Legitimate log-bucket lifecycle changes (triage the retention delta)
+level: low

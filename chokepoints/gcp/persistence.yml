@@ -1,0 +1,111 @@
+# GCP detection chokepoints — Persistence (TA0003)
+# Schema: reference/chokepoints-methodology.md. Scope queries with #Vendor=gcp.
+
+- id: CP-GCP-PERS-01
+  name: New service account created and keyed (durable foothold)
+  tactic: Persistence (TA0003)
+  technique: [T1136.003, T1098.001]
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: LOW
+  invariant: >
+    A durable non-human foothold requires creating a service account and then a
+    key (or an owner binding). Both calls are unavoidable and always logged.
+  observable:
+    method_names: [google.iam.admin.v1.CreateServiceAccount, google.iam.admin.v1.CreateServiceAccountKey]
+    service_name: iam.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.resourceName]
+  narrowing_invariant: >
+    CreateServiceAccount followed (same actor, short window) by CreateServiceAccountKey
+    and/or a SetIamPolicy binding roles/owner to the new SA. Composite. Stratus
+    create-admin-service-account performs exactly this.
+  tool_variations: [Stratus gcp.persistence.create-admin-service-account]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: confirmed
+  references:
+    - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.persistence.create-admin-service-account/
+    - https://attack.mitre.org/techniques/T1136/003/
+
+- id: CP-GCP-PERS-02
+  name: Workload Identity Federation / external IdP provider added
+  tactic: Persistence (TA0003)
+  technique: [T1136, T1484]
+  priority: HIGH
+  prevalence: EMERGING
+  detection_difficulty: MEDIUM
+  invariant: >
+    To let an external identity (attacker-controlled OIDC/SAML) impersonate a SA
+    without a key, an attacker adds a workload identity pool/provider. GTIG warns
+    OIDC/federation trust is an increasingly targeted persistence vector.
+  observable:
+    method_names:
+      - google.iam.v1.WorkloadIdentityPools.CreateWorkloadIdentityPool          # VALIDATE
+      - google.iam.v1.WorkloadIdentityPools.CreateWorkloadIdentityPoolProvider  # VALIDATE
+    service_name: iam.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.*]
+  narrowing_invariant: >
+    New pool/provider whose issuer or allowed audience/subject points at an
+    external/attacker IdP; provider added then SA tokenCreator granted to the
+    external principal.
+  actors: ["UNC6426 pattern (GitHub->cloud OIDC trust abused to mint admin) - AWS-documented, translatable to GCP WIF"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: VALIDATE (FQ strings assumed)
+  references:
+    - https://cloud.google.com/security/report/resources/cloud-threat-horizons-report-h1-2026
+
+- id: CP-GCP-PERS-03
+  name: SSH key added to project/instance metadata (lateral persistence)
+  tactic: Persistence (TA0003)       # also Lateral Movement
+  technique: [T1098.004]
+  priority: MEDIUM
+  prevalence: MEDIUM
+  detection_difficulty: MEDIUM
+  invariant: >
+    Persisting access to GCE hosts via OS Login/metadata means writing an SSH key
+    to instance or project-wide metadata.
+  observable:
+    method_names: [v1.compute.instances.setMetadata, v1.compute.projects.setCommonInstanceMetadata]  # VALIDATE
+    service_name: compute.googleapis.com
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.metadata]
+  narrowing_invariant: >
+    ssh-keys metadata item added (esp. project-wide setCommonInstanceMetadata) by
+    an unusual principal; key comment/user not in the known set.
+  tool_variations: [Stratus gcp.lateral-movement.add-sshkey-instance-metadata]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: setCommonInstanceMetadata per Datadog; instance setMetadata VALIDATE
+  references:
+    - https://securitylabs.datadoghq.com/articles/google-cloud-threat-detection/
+    - https://attack.mitre.org/techniques/T1098/004/
+
+- id: CP-GCP-PERS-04
+  name: Serverless / scheduled backdoor (public function or scheduled job)
+  tactic: Persistence (TA0003)
+  technique: [T1053, T1546, T1648]
+  priority: MEDIUM
+  prevalence: EMERGING
+  detection_difficulty: MEDIUM
+  invariant: >
+    A re-entry backdoor is created by deploying a function/service reachable
+    publicly, or a scheduled job that re-triggers attacker code with an SA.
+  observable:
+    method_names:
+      - google.cloud.functions.v1.CloudFunctionsService.SetIamPolicy   # allUsers invoker; VALIDATE
+      - google.cloud.run.v1.Services.SetIamPolicy                       # VALIDATE
+      - google.cloud.scheduler.v1.CloudScheduler.CreateJob             # VALIDATE
+    service_name: [cloudfunctions.googleapis.com, run.googleapis.com, cloudscheduler.googleapis.com]
+    audit_log_class: ADMIN_ACTIVITY
+    fields: [protoPayload.authenticationInfo.principalEmail, protoPayload.request.policy.bindings]
+  narrowing_invariant: >
+    Function/Run IAM policy granting allUsers/allAuthenticatedUsers the invoker
+    role, or a scheduler job with an attached SA + external HTTP target.
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  methodname_confidence: VALIDATE
+  references:
+    - https://attack.mitre.org/techniques/T1053/

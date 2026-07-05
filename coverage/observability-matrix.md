@@ -52,3 +52,47 @@ Detections like `sts-cross-account-new-principal` (`callerAccount ≠ resourceAc
 fields. **Many query languages, given `fieldA != fieldB`, compare `fieldA` to the literal
 string `"fieldB"`** and match every record. Use your platform's explicit field-comparison
 function and validate the result count on real data before shipping.
+
+---
+
+# GCP Cloud Audit Logs — observability matrix
+
+GCP's `protoPayload.methodName` equivalent of the AWS table above. The dividing line is the
+**audit-log class**: Admin Activity + System Event are always on; **Data Access is OFF by
+default** (only BigQuery reads are on) — the GCP analogue of the S3 GetObject gap.
+
+| Chokepoint | Tactic | methodName | Log class | Buildable now? |
+|---|---|---|---|---|
+| SA key creation | Cred Access | `google.iam.admin.v1.CreateServiceAccountKey` | ADMIN | **YES** |
+| new service account | Persistence | `google.iam.admin.v1.CreateServiceAccount` | ADMIN | **YES** |
+| setIamPolicy privileged grant | Priv Esc | `SetIamPolicy` (+ ADD bindingDelta) | ADMIN | PARTIAL — needs IaC allowlist (ADD deltas dominated by automation) |
+| SA impersonation backdoor | Priv Esc | `SetIAMPolicy` on SA (+ tokenCreator delta) | ADMIN | PARTIAL — same delta/allowlist caveat |
+| actAs attach priv SA | Priv Esc | host create event (compute/functions/run/DM/build) | ADMIN | COMPOSITE (no actAs event of its own) |
+| Cloud Build actAs-bypass | Priv Esc | `CloudBuild.CreateBuild`/`CreateBuildTrigger` | ADMIN | PARTIAL — human builds are normal; needs build-config inspection |
+| logging sink delete/disable | Defense Evasion | `ConfigServiceV2.DeleteSink`/`UpdateSink`(disabled) | ADMIN | **YES** |
+| log bucket delete/retention | Defense Evasion | `ConfigServiceV2.DeleteBucket`/`UpdateBucket` | ADMIN | **YES** |
+| firewall open to world | Defense Evasion | `compute.firewalls.insert`/`patch` (+ 0.0.0.0/0) | ADMIN | **YES** (exclude GKE control-plane robot) |
+| crypto-mining compute burst | Impact | `compute.instances.insert` (burst/GPU) | ADMIN | **YES** (burst logic) |
+| GCS made public | Impact | `storage.setIamPermissions`/`SetIamPolicy` (+ allUsers) | ADMIN | **YES** |
+| WIF / external IdP added | Persistence | `WorkloadIdentityPools.CreateWorkloadIdentityPool(Provider)` | ADMIN | YES |
+| custom role / org policy | Priv Esc | `google.iam.admin.v1.UpdateRole` / `SetOrgPolicy` | ADMIN | YES |
+| **SA impersonation (token mint)** | Cred Access | `GenerateAccessToken`/`SignBlob`/`SignJwt` | **DATA*** | **BLOCKED** — enable DATA_READ on iamcredentials |
+| **Secret Manager read** | Cred Access | `AccessSecretVersion` | **DATA*** | **BLOCKED** — enable DATA_READ on secretmanager |
+| **recon** | Discovery | `testIamPermissions`/`getIamPolicy`/Cloud Asset `SearchAll*` | **DATA*** | **BLOCKED** — enable ADMIN_READ/DATA_READ |
+| **bulk GCS object read** | Exfiltration | `storage.objects.get` | **DATA*** | **BLOCKED** — enable DATA_READ on storage (T1530) |
+
+## GCP-specific gaps & caveats
+
+1. **Data Access logs OFF by default** (the `DATA*` rows) — the single biggest GCP coverage
+   gap. Highest-leverage fix: enable `DATA_READ`/`ADMIN_READ` for `iamcredentials`,
+   `secretmanager`, `cloudresourcemanager`, `cloudasset`, and `storage`.
+2. **`SetIamPolicy` "policy contains" vs "delta added"** — a policy always contains
+   `roles/owner` etc., so matching the role in the whole policy fires on every call. Match the
+   **ADD `bindingDelta`**; even then privileged-role ADDs are dominated by IaC/automation, so
+   an IaC-principal allowlist is required before shipping.
+3. **`iam.serviceAccounts.actAs` has no methodName** — catch impersonation-via-attach through
+   the host resource-create event with the attached SA inspected (GCP PassRole analogue).
+4. **`serviceData` deprecated / dropped on export** — binding & auditConfig deltas may be
+   unreliable in exported logs; prefer `protoPayload.metadata`; validate against a live sample.
+5. **`callerIp` redaction** (`"private"`/`"gce-internal-ip"`) hides intra-Google moves;
+   **`PERMISSION_DENIED`** can drop `principalEmail` for user identities.

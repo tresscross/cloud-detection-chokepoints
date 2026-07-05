@@ -1,0 +1,28 @@
+title: GCP Logging Sink Deleted Or Disabled
+id: b2c0de02-0003-4000-9000-0000000000d3
+status: experimental
+description: >
+  Detects deletion of a Cloud Logging sink or a sink update that disables it — anti-forensics
+  now standard across ransomware crews. Near-zero legitimate rate. See
+  chokepoints/gcp/defense-evasion.yml (CP-GCP-DE-01). MITRE v19 moves T1562 to tactic TA0112.
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1562/008/
+author: Cloud Detection Chokepoints
+date: 2026/07/05
+tags:
+  - attack.defense-evasion
+  - attack.t1562.008
+logsource:
+  product: gcp
+  service: gcp.audit
+detection:
+  selection_delete:
+    data.protoPayload.methodName: google.logging.v2.ConfigServiceV2.DeleteSink
+  selection_disable:
+    data.protoPayload.methodName: google.logging.v2.ConfigServiceV2.UpdateSink
+    data.protoPayload.request.sink.disabled: true
+  condition: selection_delete or selection_disable
+falsepositives:
+  - Planned decommissioning of a logging sink (should be rare and change-controlled)
+level: low

@@ -1,13 +1,15 @@
-# AWS Detection Chokepoints
+# Cloud Detection Chokepoints
 
 > **TTPs evolve. Chokepoints don't.**
 
-A catalog of **invariant control-plane prerequisites** for AWS attack techniques — the
-mandatory API calls and request parameters an attacker *cannot avoid* regardless of the
-tool they use — and the detections that anchor to them.
+A catalog of **invariant control-plane prerequisites** for cloud attack techniques — the
+mandatory API calls an attacker *cannot avoid* regardless of the tool they use — and the
+detections that anchor to them. Currently covers **AWS (CloudTrail)** and **GCP (Cloud
+Audit Logs)**.
 
 This project applies the [detection-chokepoints](https://github.com/iimp0ster/detection-chokepoints)
-methodology (built for EDR/endpoint) to **AWS CloudTrail**. Instead of chasing tool
+methodology (built for EDR/endpoint) to **cloud control-plane logs** — AWS CloudTrail
+`eventName`s and GCP Cloud Audit `protoPayload.methodName`s. Instead of chasing tool
 signatures, user agents, or IOCs that rotate faster than we can write rules, we anchor
 detections to the *unavoidable technical requirements* of each technique: every cloud
 intrusion must authenticate, obtain or mint credentials, enumerate what it has, escalate
@@ -67,11 +69,13 @@ and allowlisted from **real** data — never guesses.
 ## Repository layout
 
 ```
-chokepoints/        YAML entries, one per chokepoint, organised by ATT&CK tactic.
+chokepoints/        AWS entries, one per chokepoint, organised by ATT&CK tactic.
                     Each carries the Q1–Q6 invariant analysis, prevalence/difficulty,
                     tool variations, observability notes, and 3-tier detection logic.
-sigma-rules/        Portable Sigma detections (product=aws, service=cloudtrail).
-trends/             Threat-intel convergence evidence — real campaigns mapped to chokepoints.
+chokepoints/gcp/    GCP entries, grouped by ATT&CK tactic, anchored to Cloud Audit
+                    methodName + audit-log class (Admin Activity vs Data Access).
+sigma-rules/        Portable Sigma detections (product=aws|gcp, service=cloudtrail|...).
+trends/             Threat-intel convergence evidence — AWS + GCP, real campaigns mapped to chokepoints.
 attack-chains/      Actor-convergence analyses — which groups share which chokepoints.
 coverage/           Observability reference: which CloudTrail events carry the signal,
                     which field the invariant lives in, and common ingestion gaps.
@@ -98,6 +102,35 @@ Control-plane invariants grouped by ATT&CK tactic. ✅ = worked entry in this re
 
 See [`coverage/observability-matrix.md`](coverage/observability-matrix.md) for the full
 event → invariant → buildability reference.
+
+## The GCP chokepoint catalog
+
+GCP control-plane invariants, anchored to Cloud Audit `protoPayload.methodName` and grouped
+by tactic in [`chokepoints/gcp/`](chokepoints/gcp/) (29 entries). Two facts shape every GCP
+entry:
+
+- **Admin Activity logs are always on; Data Access logs are OFF by default** (only BigQuery
+  reads are on) — the direct analogue of the AWS "S3 GetObject not ingested" gap. Each entry
+  records which class its `methodName` lands in. Impersonation (`GenerateAccessToken`), secret
+  reads (`AccessSecretVersion`), recon (`testIamPermissions`), and object-read exfil
+  (`storage.objects.get`) are **blind until Data Access logging is enabled**.
+- **`iam.serviceAccounts.actAs` has no audit event of its own** — the GCP PassRole analogue —
+  so impersonation-via-attach is only visible through the *host* resource-create event.
+
+| Tactic | GCP chokepoints (buildable on Admin Activity in bold) |
+|---|---|
+| Initial Access | Valid/stolen account, federated sign-in |
+| Credential Access | **SA key creation** · SA impersonation*, Secret Manager read*, metadata token theft* |
+| Discovery | testIamPermissions*, Cloud Asset SearchAll*, resource enumeration* |
+| Privilege Escalation | **setIamPolicy grant**, **SA-policy backdoor**, actAs-attach, **DM/Cloud Build actAs-bypass**, custom-role, org-policy |
+| Persistence | **new SA + key**, WIF/external IdP, SSH-key-to-metadata, serverless backdoor |
+| Defense Evasion | **logging sink delete/disable**, **log bucket delete**, audit-config disable, **firewall to world** |
+| Impact / Exfil | **crypto-mining burst**, cross-project sharing, **GCS made public**, bulk object read*, data destruction |
+
+\* = **blind by default** (Data Access log gap). See
+[`trends/gcp-chokepoint-convergence.md`](trends/gcp-chokepoint-convergence.md) for the GCP
+actor-convergence evidence and [`coverage/observability-matrix.md`](coverage/observability-matrix.md)
+for the full buildable-vs-blocked split.
 
 ## Threat-intel backing
 
