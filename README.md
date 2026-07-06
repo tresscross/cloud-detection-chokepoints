@@ -39,74 +39,74 @@ seen in another cloud). **`[blind]`** = observable only after read/data-plane lo
 
 | Chokepoint | Tactic | Priority | Tier |
 |---|---|---|---|
-| IAM policy-version self-escalation | privilege-escalation | CRITICAL | AGGREGATE |
-| Inline-policy self-escalation | privilege-escalation | CRITICAL | AGGREGATE |
-| Privileged managed-policy attach | privilege-escalation | HIGH | INCIDENT |
-| Role trust policy grants external principal | persistence | HIGH | INCIDENT |
-| Federation / IdP backdoor | persistence | HIGH | CAPABILITY |
-| EventBridge rule → cross-account target | persistence | MEDIUM | CAPABILITY |
-| Secrets Manager read by human/unknown principal | credential-access | HIGH | INCIDENT |
-| IAM / account enumeration burst | discovery | MEDIUM | INCIDENT |
-| CloudTrail / Config / FlowLog tampering | defense-evasion | HIGH | INCIDENT |
-| KMS key sabotage or public key policy | defense-evasion | HIGH | CAPABILITY |
-| Cross-account AssumeRole from new external principal | lateral-movement | MEDIUM | AGGREGATE |
-| Console sign-in anomaly (MFA bypass / foreign geo) | initial-access | HIGH | AGGREGATE |
-| EBS snapshot / AMI shared to external account | exfiltration | HIGH | AGGREGATE |
-| S3 ransomware via SSE-C encryption-in-place | impact | HIGH | INCIDENT |
-| SES sending / identity abuse | impact | MEDIUM | INCIDENT |
+| [Secrets Manager read by a human or unknown principal](chokepoints/aws/credential-access/secrets-manager-mass-read.yml) | credential-access | HIGH | INCIDENT |
+| [CloudTrail / Config / FlowLog tampering](chokepoints/aws/defense-evasion/cloudtrail-config-tampering.yml) | defense-evasion | HIGH | INCIDENT |
+| [KMS key sabotage or public key policy](chokepoints/aws/defense-evasion/kms-key-sabotage.yml) | defense-evasion | HIGH | CAPABILITY |
+| [IAM / account enumeration burst](chokepoints/aws/discovery/iam-enumeration-burst.yml) | discovery | MEDIUM | INCIDENT |
+| [EBS snapshot / AMI shared to an external account](chokepoints/aws/exfiltration/ebs-snapshot-ami-shared-external.yml) | exfiltration | HIGH | AGGREGATE |
+| [S3 ransomware via SSE-C encryption-in-place](chokepoints/aws/impact/s3-sse-c-ransomware.yml) | impact | HIGH | INCIDENT |
+| [SES sending / identity abuse](chokepoints/aws/impact/ses-sending-identity-abuse.yml) | impact | MEDIUM | INCIDENT |
+| [Console sign-in anomaly (MFA bypass / foreign geo)](chokepoints/aws/initial-access/console-login-anomaly.yml) | initial-access | HIGH | AGGREGATE |
+| [Cross-account AssumeRole from a new external principal](chokepoints/aws/lateral-movement/sts-cross-account-new-principal.yml) | lateral-movement | MEDIUM | AGGREGATE |
+| [Federation / identity-provider backdoor](chokepoints/aws/persistence/iam-federation-idp-created.yml) | persistence | HIGH | CAPABILITY |
+| [Role trust policy grants an external principal](chokepoints/aws/persistence/iam-role-trust-external-principal.yml) | persistence | HIGH | INCIDENT |
+| [EventBridge rule wired to a cross-account target](chokepoints/aws/persistence/eventbridge-cross-account-target.yml) | persistence | MEDIUM | CAPABILITY |
+| [IAM policy-version self-escalation](chokepoints/aws/privilege-escalation/iam-create-policy-version.yml) | privilege-escalation | CRITICAL | AGGREGATE |
+| [Inline-policy self-escalation](chokepoints/aws/privilege-escalation/iam-inline-policy-self-escalation.yml) | privilege-escalation | CRITICAL | AGGREGATE |
+| [Privileged managed-policy attached to a user or role](chokepoints/aws/privilege-escalation/iam-privileged-policy-attach.yml) | privilege-escalation | HIGH | INCIDENT |
 
 ### GCP — Cloud Audit Logs (29)
 
 | Chokepoint | Tactic | Priority | Tier |
 |---|---|---|---|
-| setIamPolicy self/external privileged grant | privilege-escalation | CRITICAL | INCIDENT |
-| Backdoor a service account (grant TokenCreator) | privilege-escalation | CRITICAL | CAPABILITY |
-| Attach privileged service account (actAs / PassRole-analog) | privilege-escalation | CRITICAL | CAPABILITY |
-| actAs-bypass via Deployment Manager / Cloud Build agent | privilege-escalation | HIGH | CAPABILITY |
-| Instance created with startup-script + attached SA | privilege-escalation | HIGH | CAPABILITY |
-| Org policy constraint weakened | privilege-escalation | HIGH | CAPABILITY |
-| Custom role updated to add privileges | privilege-escalation | MEDIUM | CAPABILITY |
-| Service-account key creation | credential-access | CRITICAL | INCIDENT |
-| SA impersonation — token minting / signing | credential-access | CRITICAL | CAPABILITY `[blind]` |
-| Secret Manager secret access | credential-access | HIGH | CAPABILITY `[blind]` |
-| Instance metadata SA-token theft | credential-access | HIGH | CAPABILITY `[blind]` |
-| New service account created and keyed | persistence | HIGH | CAPABILITY |
-| Workload Identity Federation / external IdP added | persistence | HIGH | TRANSLATABLE |
-| SSH key added to project/instance metadata | persistence | MEDIUM | CAPABILITY |
-| Serverless / scheduled backdoor | persistence | MEDIUM | CAPABILITY |
-| Logging sink deletion or disable | defense-evasion | CRITICAL | AGGREGATE |
-| Log bucket deletion / retention reduction | defense-evasion | HIGH | CAPABILITY |
-| Audit logging disabled via auditConfig | defense-evasion | HIGH | CAPABILITY |
-| Telemetry disabled (VPC Flow / DNS / project detach) | defense-evasion | MEDIUM | CAPABILITY |
-| Firewall opened to the world | defense-evasion | MEDIUM | CAPABILITY |
-| IAM permission brute-forcing | discovery | HIGH | CAPABILITY `[blind]` |
-| Org-wide asset enumeration (Cloud Asset Inventory) | discovery | MEDIUM | CAPABILITY `[blind]` |
-| Resource enumeration | discovery | MEDIUM | CAPABILITY `[blind]` |
-| Valid stolen account vs control plane | initial-access | CRITICAL | INCIDENT |
-| Cross-project data transfer via resource IAM sharing | exfiltration | HIGH | INCIDENT |
-| Bulk object read from Cloud Storage | exfiltration | HIGH | CAPABILITY `[blind]` |
-| Resource hijacking — cryptomining compute | impact | HIGH | INCIDENT |
-| GCS bucket / object made public | impact | HIGH | CAPABILITY |
-| Data destruction / ransomware | impact | HIGH | CAPABILITY |
+| [Service-account impersonation — access/OIDC token minting & signing](chokepoints/gcp/credential-access/service-account-impersonation-token.yml) | credential-access | CRITICAL | CAPABILITY `[blind]` |
+| [Service-account key creation (long-lived credential minting)](chokepoints/gcp/credential-access/service-account-key-created.yml) | credential-access | CRITICAL | INCIDENT |
+| [Compute instance metadata token theft (SA token from 169.254.169.254)](chokepoints/gcp/credential-access/instance-metadata-token-theft.yml) | credential-access | HIGH | CAPABILITY `[blind]` |
+| [Secret Manager secret access](chokepoints/gcp/credential-access/secret-manager-access.yml) | credential-access | HIGH | CAPABILITY `[blind]` |
+| [Logging sink deletion or disable](chokepoints/gcp/defense-evasion/logging-sink-deleted-or-disabled.yml) | defense-evasion | CRITICAL | AGGREGATE |
+| [Audit logging disabled via IAM auditConfig change](chokepoints/gcp/defense-evasion/audit-logging-disabled-auditconfig.yml) | defense-evasion | HIGH | CAPABILITY |
+| [Log bucket deletion / retention reduction](chokepoints/gcp/defense-evasion/log-bucket-deleted-or-retention-reduced.yml) | defense-evasion | HIGH | CAPABILITY |
+| [Firewall opened to the world](chokepoints/gcp/defense-evasion/firewall-opened-to-world.yml) | defense-evasion | MEDIUM | CAPABILITY |
+| [Telemetry disabled — VPC Flow Logs / DNS logging / project detach](chokepoints/gcp/defense-evasion/network-telemetry-disabled.yml) | defense-evasion | MEDIUM | CAPABILITY |
+| [IAM permission brute-forcing (testIamPermissions / queryTestablePermissions)](chokepoints/gcp/discovery/iam-permission-bruteforce.yml) | discovery | HIGH | CAPABILITY `[blind]` |
+| [Org-wide asset enumeration via Cloud Asset Inventory](chokepoints/gcp/discovery/cloud-asset-inventory-enumeration.yml) | discovery | MEDIUM | CAPABILITY `[blind]` |
+| [Resource enumeration (instances/buckets/service-accounts list)](chokepoints/gcp/discovery/resource-enumeration.yml) | discovery | MEDIUM | CAPABILITY `[blind]` |
+| [Bulk object read / data exfiltration from Cloud Storage](chokepoints/gcp/exfiltration/gcs-bulk-object-read.yml) | exfiltration | HIGH | CAPABILITY `[blind]` |
+| [Cross-project data transfer via resource IAM sharing](chokepoints/gcp/exfiltration/cross-project-resource-share.yml) | exfiltration | HIGH | INCIDENT |
+| [Data destruction / ransomware (mass delete or client-side re-encrypt)](chokepoints/gcp/impact/gcs-data-destruction-ransomware.yml) | impact | HIGH | CAPABILITY |
+| [GCS bucket / object made public](chokepoints/gcp/impact/gcs-bucket-made-public.yml) | impact | HIGH | CAPABILITY |
+| [Resource hijacking — compute spun up for cryptomining](chokepoints/gcp/impact/cryptomining-compute-hijack.yml) | impact | HIGH | INCIDENT |
+| [Valid cloud account / stolen credential used against the control plane](chokepoints/gcp/initial-access/valid-account-control-plane.yml) | initial-access | CRITICAL | INCIDENT |
+| [New service account created and keyed (durable foothold)](chokepoints/gcp/persistence/service-account-created-and-keyed.yml) | persistence | HIGH | CAPABILITY |
+| [Workload Identity Federation / external IdP provider added](chokepoints/gcp/persistence/workload-identity-federation-added.yml) | persistence | HIGH | TRANSLATABLE |
+| [SSH key added to project/instance metadata (lateral persistence)](chokepoints/gcp/persistence/ssh-key-added-to-metadata.yml) | persistence | MEDIUM | CAPABILITY |
+| [Serverless / scheduled backdoor (public function or scheduled job)](chokepoints/gcp/persistence/serverless-scheduled-backdoor.yml) | persistence | MEDIUM | CAPABILITY |
+| [Attach a privileged service account to a new resource (actAs / PassRole-analog)](chokepoints/gcp/privilege-escalation/privileged-service-account-attach.yml) | privilege-escalation | CRITICAL | CAPABILITY |
+| [Backdoor a service account via its IAM policy (grant TokenCreator)](chokepoints/gcp/privilege-escalation/service-account-tokencreator-grant.yml) | privilege-escalation | CRITICAL | CAPABILITY |
+| [setIamPolicy self-grant / external grant at project / folder / org](chokepoints/gcp/privilege-escalation/setiampolicy-privileged-grant.yml) | privilege-escalation | CRITICAL | INCIDENT |
+| [Compute instance created with startup-script + attached SA](chokepoints/gcp/privilege-escalation/instance-startup-script-attached-sa.yml) | privilege-escalation | HIGH | CAPABILITY |
+| [Org policy constraint weakened to enable other primitives](chokepoints/gcp/privilege-escalation/org-policy-constraint-weakened.yml) | privilege-escalation | HIGH | CAPABILITY |
+| [actAs-bypass via Deployment Manager / Cloud Build default agent](chokepoints/gcp/privilege-escalation/actas-bypass-deployment-agent.yml) | privilege-escalation | HIGH | CAPABILITY |
+| [Custom role updated to add privileges](chokepoints/gcp/privilege-escalation/custom-role-privilege-add.yml) | privilege-escalation | MEDIUM | CAPABILITY |
 
 ### Azure — Activity Log (14)
 
 | Chokepoint | Tactic | Priority | Tier |
 |---|---|---|---|
-| Elevate access to all subscriptions (tenant-wide) | privilege-escalation | CRITICAL | CAPABILITY |
-| RBAC role assignment created | privilege-escalation | HIGH | INCIDENT |
-| Custom role definition created/modified | privilege-escalation | MEDIUM | CAPABILITY |
-| Key Vault access policy / vault write | credential-access | HIGH | CAPABILITY |
-| Storage account key regenerated | credential-access | MEDIUM | CAPABILITY |
-| Key Vault secret read | credential-access | HIGH | CAPABILITY `[blind]` |
-| Diagnostic settings deleted | defense-evasion | HIGH | CAPABILITY |
-| NSG rule opened to the internet | defense-evasion | HIGH | CAPABILITY |
-| Defender for Cloud / auto-provisioning disabled | defense-evasion | MEDIUM | CAPABILITY |
-| VM run-command execution | execution | HIGH | CAPABILITY |
-| App Service (Kudu) command / function keys | execution | MEDIUM | CAPABILITY |
-| Managed disk exported via SAS | exfiltration | HIGH | CAPABILITY |
-| Storage bulk blob read | exfiltration | HIGH | CAPABILITY `[blind]` |
-| Backup / recovery destruction | impact | HIGH | INCIDENT |
+| [Key Vault access policy / vault write](chokepoints/azure/credential-access/key-vault-access-policy-write.yml) | credential-access | HIGH | CAPABILITY |
+| [Key Vault secret read](chokepoints/azure/credential-access/key-vault-secret-read.yml) | credential-access | HIGH | CAPABILITY `[blind]` |
+| [Storage account key regenerated](chokepoints/azure/credential-access/storage-account-key-regenerated.yml) | credential-access | MEDIUM | CAPABILITY |
+| [Diagnostic settings deleted](chokepoints/azure/defense-evasion/diagnostic-settings-deleted.yml) | defense-evasion | HIGH | CAPABILITY |
+| [NSG rule opened to the internet](chokepoints/azure/defense-evasion/nsg-rule-opened-to-internet.yml) | defense-evasion | HIGH | CAPABILITY |
+| [Microsoft Defender for Cloud / auto-provisioning disabled](chokepoints/azure/defense-evasion/defender-for-cloud-disabled.yml) | defense-evasion | MEDIUM | CAPABILITY |
+| [VM run-command execution](chokepoints/azure/execution/vm-run-command.yml) | execution | HIGH | CAPABILITY |
+| [App Service (Kudu) command / function key access](chokepoints/azure/execution/app-service-kudu-command.yml) | execution | MEDIUM | CAPABILITY |
+| [Managed disk exported via SAS](chokepoints/azure/exfiltration/managed-disk-exported-sas.yml) | exfiltration | HIGH | CAPABILITY |
+| [Storage bulk blob read (data exfiltration)](chokepoints/azure/exfiltration/storage-bulk-blob-read.yml) | exfiltration | HIGH | CAPABILITY `[blind]` |
+| [Backup / recovery destruction](chokepoints/azure/impact/backup-recovery-destruction.yml) | impact | HIGH | INCIDENT |
+| [Elevate access to all subscriptions (tenant-wide)](chokepoints/azure/privilege-escalation/elevate-access-all-subscriptions.yml) | privilege-escalation | CRITICAL | CAPABILITY |
+| [RBAC role assignment created](chokepoints/azure/privilege-escalation/role-assignment-created.yml) | privilege-escalation | HIGH | INCIDENT |
+| [Custom role definition created or modified](chokepoints/azure/privilege-escalation/custom-role-definition-created.yml) | privilege-escalation | MEDIUM | CAPABILITY |
 
 ## Attack chains
 
