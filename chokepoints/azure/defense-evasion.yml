@@ -1,0 +1,58 @@
+# Azure detection chokepoints — Defense Evasion (TA0005)
+
+- id: AZ-DE-01
+  name: Diagnostic settings deleted
+  tactic: Defense Evasion (TA0005)
+  technique: [T1562.008]
+  priority: HIGH
+  prevalence: EMERGING
+  detection_difficulty: LOW
+  invariant: >
+    Microsoft.Insights/diagnosticSettings/delete removes a resource's log export to Log
+    Analytics / Event Hub / Storage — blinding downstream monitoring. Anti-forensics.
+  observable:
+    operation_names: [MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE, MICROSOFT.INSIGHTS/LOGPROFILES/DELETE]
+    log_class: ACTIVITY_LOG
+  narrowing_invariant: Any delete of a diagnostic setting / log profile (near-zero baseline).
+  actors: ["Ransomware crews broadly (log deletion is now standard)"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  references: [https://attack.mitre.org/techniques/T1562/008/]
+
+- id: AZ-DE-02
+  name: NSG rule opened to the internet
+  tactic: Defense Evasion (TA0005)   # also Lateral Movement enablement
+  technique: [T1562.007]
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: MEDIUM
+  invariant: >
+    Microsoft.Network/networkSecurityGroups/securityRules/write allowing inbound from
+    0.0.0.0/0 / "*" / "Internet" on a sensitive port (22/3389/*) exposes management or
+    service to the world.
+  observable:
+    operation_names: [MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/SECURITYRULES/WRITE]
+    log_class: ACTIVITY_LOG
+    fields: [request body (sourceAddressPrefix, destinationPortRange) — often in the request body only]
+  narrowing_invariant: sourceAddressPrefix in (0.0.0.0/0, *, Internet) + sensitive/any destination port.
+  observability_status: OBSERVABLE
+  observability_note: The source/port live in the request body; may not always be logged — collect and triage.
+  detection_maturity: research
+  references: [https://attack.mitre.org/techniques/T1562/007/]
+
+- id: AZ-DE-03
+  name: Microsoft Defender for Cloud / auto-provisioning disabled
+  tactic: Defense Evasion (TA0005)
+  technique: [T1562.001]
+  priority: MEDIUM
+  prevalence: EMERGING
+  detection_difficulty: MEDIUM
+  invariant: >
+    Microsoft.Security/pricings/write (downgrade to Free) or auto-provisioning/policy disable
+    turns off Defender coverage — reducing detection before the rest of the attack.
+  observable:
+    operation_names: [MICROSOFT.SECURITY/PRICINGS/WRITE, MICROSOFT.SECURITY/AUTOPROVISIONINGSETTINGS/WRITE]
+    log_class: ACTIVITY_LOG
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  references: [https://attack.mitre.org/techniques/T1562/001/]

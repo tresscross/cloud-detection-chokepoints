@@ -1,0 +1,59 @@
+# Azure detection chokepoints — Exfiltration / Impact (TA0010 / TA0040)
+
+- id: AZ-EX-01
+  name: Managed disk exported via SAS
+  tactic: Exfiltration (TA0010)
+  technique: [T1537]
+  priority: HIGH
+  prevalence: EMERGING
+  detection_difficulty: LOW
+  invariant: >
+    Microsoft.Compute/disks/beginGetAccess/action mints a SAS download URL for a managed disk —
+    the "copy the disk out" exfil path, no VM interaction. Backup vendors use
+    restorePoints/retrieveSasUris instead (allowlistable), so beginGetAccess by a non-backup
+    principal is the signal.
+  observable:
+    operation_names: [MICROSOFT.COMPUTE/DISKS/BEGINGETACCESS/ACTION, MICROSOFT.COMPUTE/SNAPSHOTS/BEGINGETACCESS/ACTION]
+    log_class: ACTIVITY_LOG
+  narrowing_invariant: beginGetAccess by a principal outside the known backup/DR set.
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  references: [https://attack.mitre.org/techniques/T1537/]
+
+- id: AZ-EX-02
+  name: Storage bulk blob read (data exfiltration)
+  tactic: Exfiltration (TA0010)
+  technique: [T1530]
+  priority: HIGH
+  prevalence: HIGH
+  detection_difficulty: LOW
+  invariant: >
+    Reading blobs at scale (GetBlob) is the bulk-exfil chokepoint — but it is a DATA-PLANE
+    operation, logged only if the storage account's diagnostic settings route StorageRead logs
+    to Log Analytics. OFF by default.
+  observable:
+    operation_names: [GetBlob]
+    log_class: DATA_PLANE
+  observability_status: INGEST_GAP
+  observability_note: BLOCKED — Azure analogue of the AWS S3-GetObject / GCP Data-Access gap. Enable storage diagnostic logging (StorageRead) to unblock.
+  detection_maturity: blocked
+  references: [https://attack.mitre.org/techniques/T1530/]
+
+- id: AZ-IMP-01
+  name: Backup / recovery destruction
+  tactic: Impact (TA0040)
+  technique: [T1490, T1485]
+  priority: HIGH
+  prevalence: EMERGING
+  detection_difficulty: MEDIUM
+  invariant: >
+    Deleting Recovery Services vault items, restore points, snapshots, or removing resource
+    locks / immutability before encryption — the anti-recovery step of cloud ransomware.
+  observable:
+    operation_names: [MICROSOFT.RECOVERYSERVICES/VAULTS/BACKUPFABRICS/PROTECTIONCONTAINERS/PROTECTEDITEMS/DELETE, MICROSOFT.COMPUTE/SNAPSHOTS/DELETE, MICROSOFT.AUTHORIZATION/LOCKS/DELETE]
+    log_class: ACTIVITY_LOG
+  narrowing_invariant: backup/restore-point/snapshot delete or lock removal by a non-backup principal, especially in a burst.
+  actors: ["Storm-0501 (Azure ransomware — deletes backups + removes immutability before encrypting)"]
+  observability_status: OBSERVABLE
+  detection_maturity: hunt
+  references: [https://attack.mitre.org/techniques/T1490/]

@@ -4,12 +4,13 @@
 
 A catalog of **invariant control-plane prerequisites** for cloud attack techniques — the
 mandatory API calls an attacker *cannot avoid* regardless of the tool they use — and the
-detections that anchor to them. Currently covers **AWS (CloudTrail)** and **GCP (Cloud
-Audit Logs)**.
+detections that anchor to them. Currently covers **AWS (CloudTrail)**, **GCP (Cloud
+Audit Logs)**, and **Azure (Activity Log)**.
 
 This project applies the [detection-chokepoints](https://github.com/iimp0ster/detection-chokepoints)
 methodology (built for EDR/endpoint) to **cloud control-plane logs** — AWS CloudTrail
-`eventName`s and GCP Cloud Audit `protoPayload.methodName`s. Instead of chasing tool
+`eventName`s, GCP Cloud Audit `protoPayload.methodName`s, and Azure Activity Log
+`operationName`s. Instead of chasing tool
 signatures, user agents, or IOCs that rotate faster than we can write rules, we anchor
 detections to the *unavoidable technical requirements* of each technique: every cloud
 intrusion must authenticate, obtain or mint credentials, enumerate what it has, escalate
@@ -74,8 +75,10 @@ chokepoints/        AWS entries, one per chokepoint, organised by ATT&CK tactic.
                     tool variations, observability notes, and 3-tier detection logic.
 chokepoints/gcp/    GCP entries, grouped by ATT&CK tactic, anchored to Cloud Audit
                     methodName + audit-log class (Admin Activity vs Data Access).
-sigma-rules/        Portable Sigma detections (product=aws|gcp, service=cloudtrail|...).
-trends/             Threat-intel convergence evidence — AWS + GCP, real campaigns mapped to chokepoints.
+chokepoints/azure/  Azure entries, grouped by ATT&CK tactic, anchored to Activity Log
+                    operationName + log class (Activity Log vs data-plane).
+sigma-rules/        Portable Sigma detections (product=aws|gcp|azure).
+trends/             Threat-intel convergence evidence — AWS + GCP + Azure, real campaigns mapped to chokepoints.
 attack-chains/      Actor-convergence analyses — which groups share which chokepoints.
 coverage/           Observability reference: which CloudTrail events carry the signal,
                     which field the invariant lives in, and common ingestion gaps.
@@ -131,6 +134,32 @@ entry:
 [`trends/gcp-chokepoint-convergence.md`](trends/gcp-chokepoint-convergence.md) for the GCP
 actor-convergence evidence and [`coverage/observability-matrix.md`](coverage/observability-matrix.md)
 for the full buildable-vs-blocked split.
+
+## The Azure chokepoint catalog
+
+Azure control-plane invariants, anchored to Azure Activity Log `operationName` and grouped by
+tactic in [`chokepoints/azure/`](chokepoints/azure/) (14 entries). **Scope is Azure
+resource/control-plane; Entra ID / Azure AD identity is a separate source and out of scope.**
+Two facts shape every entry:
+
+- **Activity Log (control-plane) is always on; resource/data-plane logs are OFF by default**
+  (per-resource diagnostic settings → Log Analytics) — the Azure analogue of the S3-GetObject
+  / GCP-Data-Access gap. **Key Vault secret reads** (`SecretGet`) and **bulk blob reads**
+  (`GetBlob`) are **blind by default**.
+- **`roleAssignments/write` doesn't cleanly log the granted role/principal** — only the
+  caller's authorizing role — so narrowing to "Owner granted to X" needs request-body inspection.
+
+| Tactic | Azure chokepoints (buildable on Activity Log in bold) |
+|---|---|
+| Privilege Escalation | **RBAC role assignment**, **elevate-access (tenant-wide)**, **custom role** |
+| Credential Access | **storage key regen / listKeys**, Key Vault access-policy, Key Vault secret read* |
+| Defense Evasion | **diagnostic-settings delete**, **NSG rule to internet**, Defender disable |
+| Execution | **VM run-command**, App Service Kudu / function keys |
+| Exfiltration / Impact | **managed-disk export SAS**, bulk blob read*, backup/recovery destruction |
+
+\* = **blind by default** (data-plane diagnostic-log gap). See
+[`trends/azure-chokepoint-convergence.md`](trends/azure-chokepoint-convergence.md) and the
+Azure section of [`coverage/observability-matrix.md`](coverage/observability-matrix.md).
 
 ## Threat-intel backing
 

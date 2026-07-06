@@ -1,0 +1,24 @@
+title: Azure VM Run-Command Executed
+id: c3c0de03-0005-4000-9000-0000000000e5
+status: experimental
+description: >
+  Detects Microsoft.Compute/virtualMachines/runCommand/action (and runCommands/write) —
+  arbitrary command execution on a VM via ARM (no guest network access). Near-zero baseline.
+  See chokepoints/azure/execution.yml (AZ-EXEC-01).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1651/
+author: Cloud Detection Chokepoints
+date: 2026/07/06
+tags: [attack.execution, attack.t1651]
+logsource:
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName|startswith: MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND
+    resultType: Success
+  condition: selection
+falsepositives:
+  - Automation/config-management that legitimately uses run-command (allowlist)
+level: low

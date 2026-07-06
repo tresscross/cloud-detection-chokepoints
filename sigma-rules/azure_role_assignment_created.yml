@@ -1,0 +1,25 @@
+title: Azure RBAC Role Assignment Created
+id: c3c0de03-0001-4000-9000-0000000000e1
+status: experimental
+description: >
+  Detects Microsoft.Authorization/roleAssignments/write (Azure Activity Log). Analyst tier
+  narrows to privileged roles (Owner/Contributor/User Access Administrator) to a new/external
+  principal — but the granted role/principal are not cleanly logged (only the caller's
+  authorizing role), so request-body inspection is needed. See chokepoints/azure/privilege-escalation.yml (AZ-PE-01).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1098/003/
+author: Cloud Detection Chokepoints
+date: 2026/07/06
+tags: [attack.privilege-escalation, attack.t1098.003]
+logsource:
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName: MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE
+    resultType: Success
+  condition: selection
+falsepositives:
+  - Governance admins / IaC assigning roles (allowlist known principals; baseline)
+level: low

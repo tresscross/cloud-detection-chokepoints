@@ -1,0 +1,25 @@
+title: Azure Diagnostic Settings Deleted
+id: c3c0de03-0003-4000-9000-0000000000e3
+status: experimental
+description: >
+  Detects Microsoft.Insights/diagnosticSettings/delete — removing a resource's log export
+  (anti-forensics). Near-zero legitimate rate. See chokepoints/azure/defense-evasion.yml (AZ-DE-01).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1562/008/
+author: Cloud Detection Chokepoints
+date: 2026/07/06
+tags: [attack.defense-evasion, attack.t1562.008]
+logsource:
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName:
+      - MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE
+      - MICROSOFT.INSIGHTS/LOGPROFILES/DELETE
+    resultType: Success
+  condition: selection
+falsepositives:
+  - Planned decommissioning of a diagnostic setting (rare; change-controlled)
+level: low

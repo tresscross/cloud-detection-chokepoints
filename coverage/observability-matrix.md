@@ -96,3 +96,40 @@ default** (only BigQuery reads are on) — the GCP analogue of the S3 GetObject 
    unreliable in exported logs; prefer `protoPayload.metadata`; validate against a live sample.
 5. **`callerIp` redaction** (`"private"`/`"gce-internal-ip"`) hides intra-Google moves;
    **`PERMISSION_DENIED`** can drop `principalEmail` for user identities.
+
+---
+
+# Azure Activity Log — observability matrix
+
+Azure's `operationName` equivalent of the AWS/GCP tables. The dividing line: **Activity Log
+(control-plane) is always on; resource/data-plane logs are OFF by default** (per-resource
+diagnostic settings → Log Analytics) — the Azure analogue of the S3-GetObject / GCP-Data-Access gap.
+
+| Chokepoint | Tactic | operationName | Log class | Buildable now? |
+|---|---|---|---|---|
+| RBAC role assignment | Priv Esc | `MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE` | ACTIVITY | **YES** (granted-role narrowing needs request body) |
+| Elevate access (tenant-wide) | Priv Esc | `MICROSOFT.AUTHORIZATION/ELEVATEACCESS/ACTION` | ACTIVITY | **YES** (zero-baseline) |
+| Custom role definition | Priv Esc | `MICROSOFT.AUTHORIZATION/ROLEDEFINITIONS/WRITE` | ACTIVITY | **YES** |
+| Storage account key regen | Cred Access | `MICROSOFT.STORAGE/STORAGEACCOUNTS/REGENERATEKEY/ACTION` | ACTIVITY | **YES** |
+| Storage key/SAS listing | Cred Access | `…/LISTKEYS/ACTION`, `…/LISTACCOUNTSAS/ACTION` | ACTIVITY | YES (routine — narrow to unexpected principal) |
+| Key Vault access-policy write | Cred Access | `MICROSOFT.KEYVAULT/VAULTS/WRITE` (accessPolicies) | ACTIVITY | PARTIAL (policy visible; secret reads are data-plane) |
+| Diagnostic settings deleted | Defense Evasion | `MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE` | ACTIVITY | **YES** (zero-baseline) |
+| NSG rule to internet | Defense Evasion | `MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/SECURITYRULES/WRITE` | ACTIVITY | **YES** (0.0.0.0/0 source in request body) |
+| Defender/auto-provision disable | Defense Evasion | `MICROSOFT.SECURITY/PRICINGS/WRITE`, `…/AUTOPROVISIONINGSETTINGS/WRITE` | ACTIVITY | YES |
+| VM run-command (RCE) | Execution | `MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND/ACTION` (+ `RUNCOMMANDS/WRITE`) | ACTIVITY | **YES** (zero-baseline) |
+| App Service Kudu command / func keys | Execution | `MICROSOFT.WEB/SITES/EXTENSIONS/COMMAND/ACTION`, `…/HOST/LISTKEYS/ACTION` | ACTIVITY | YES (CI-noisy — allowlist deploy principals) |
+| Managed disk export SAS | Exfiltration | `MICROSOFT.COMPUTE/DISKS/BEGINGETACCESS/ACTION` | ACTIVITY | **YES** (allowlist backup vendors' restorePoints path) |
+| Backup / recovery destruction | Impact | recovery-vault/snapshot `DELETE`, `AUTHORIZATION/LOCKS/DELETE` | ACTIVITY | YES (burst/non-backup principal) |
+| **Key Vault secret read** | Cred Access | `SecretGet`/`KeyGet` | **DATA-PLANE** | **BLOCKED** — enable Key Vault AuditEvent diagnostic logging |
+| **Bulk blob read** | Exfiltration | `GetBlob` | **DATA-PLANE** | **BLOCKED** — enable storage StorageRead diagnostic logging (T1530) |
+
+## Azure-specific gaps & caveats
+
+1. **Data-plane logs OFF by default** (`SecretGet`, `GetBlob`) — the biggest Azure coverage
+   gap. Enable per-resource diagnostic settings → Log Analytics for Key Vault (AuditEvent) and
+   Storage (StorageRead) on crown-jewel resources, then confirm forwarding to the SIEM.
+2. **`roleAssignments/write` granted-role/principal** live in the (often unlogged) request body;
+   the Activity Log's `identity.authorization.evidence.role` is the CALLER's authorizing role.
+3. **Activity Log coverage may be partial** — confirm every subscription forwards its Activity
+   Log; low total volume can mean incomplete coverage rather than low activity.
+4. **`callerIpAddress`** may be an Azure-internal address for platform-initiated operations.

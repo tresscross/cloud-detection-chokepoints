@@ -1,0 +1,28 @@
+title: Azure Managed Disk Exported Via SAS
+id: c3c0de03-0004-4000-9000-0000000000e4
+status: experimental
+description: >
+  Detects Microsoft.Compute/disks/beginGetAccess/action (and snapshots) — minting a SAS
+  download URL for a managed disk (disk exfiltration). Backup vendors use
+  restorePoints/retrieveSasUris instead (allowlist). See chokepoints/azure/exfiltration.yml (AZ-EX-01).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1537/
+author: Cloud Detection Chokepoints
+date: 2026/07/06
+tags: [attack.exfiltration, attack.t1537]
+logsource:
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName:
+      - MICROSOFT.COMPUTE/DISKS/BEGINGETACCESS/ACTION
+      - MICROSOFT.COMPUTE/SNAPSHOTS/BEGINGETACCESS/ACTION
+    resultType: Success
+  filter_backup:
+    caller|contains: 'backup'
+  condition: selection and not filter_backup
+falsepositives:
+  - Backup / DR tooling exporting disks (allowlist the backup principals)
+level: low

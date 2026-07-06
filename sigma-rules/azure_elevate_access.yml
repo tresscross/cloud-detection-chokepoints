@@ -1,0 +1,23 @@
+title: Azure Elevate Access To All Subscriptions
+id: c3c0de03-0002-4000-9000-0000000000e2
+status: experimental
+description: >
+  Detects Microsoft.Authorization/elevateAccess/action — a Global Administrator granting
+  themselves User Access Administrator across all subscriptions (tenant-wide takeover).
+  Near-zero baseline; any occurrence is review-worthy. See chokepoints/azure/privilege-escalation.yml (AZ-PE-02).
+references:
+  - https://github.com/iimp0ster/detection-chokepoints
+  - https://attack.mitre.org/techniques/T1548/005/
+author: Cloud Detection Chokepoints
+date: 2026/07/06
+tags: [attack.privilege-escalation, attack.t1548.005]
+logsource:
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName: MICROSOFT.AUTHORIZATION/ELEVATEACCESS/ACTION
+  condition: selection
+falsepositives:
+  - Rare, deliberate break-glass tenant elevation (should be change-controlled)
+level: high

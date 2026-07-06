@@ -1,0 +1,40 @@
+# Azure detection chokepoints — Execution (TA0002)
+
+- id: AZ-EXEC-01
+  name: VM run-command execution
+  tactic: Execution (TA0002)   # also Lateral Movement
+  technique: [T1651]
+  priority: HIGH
+  prevalence: MEDIUM
+  detection_difficulty: LOW
+  invariant: >
+    Microsoft.Compute/virtualMachines/runCommand/action (and the managed runCommands/write
+    variant) executes arbitrary commands on a VM through the control plane — no guest network
+    access needed. The Azure analogue of AWS SSM SendCommand.
+  observable:
+    operation_names: [MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND/ACTION, MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMANDS/WRITE]
+    log_class: ACTIVITY_LOG
+  narrowing_invariant: Any run-command by a non-automation principal (near-zero baseline).
+  actors: ["Hands-on-keyboard operators pivoting from control plane to guest"]
+  observability_status: OBSERVABLE
+  detection_maturity: research
+  references: [https://attack.mitre.org/techniques/T1651/]
+
+- id: AZ-EXEC-02
+  name: App Service (Kudu) command / function key access
+  tactic: Execution (TA0002)
+  technique: [T1651]
+  priority: MEDIUM
+  prevalence: MEDIUM
+  detection_difficulty: MEDIUM
+  invariant: >
+    Microsoft.Web/sites/extensions/command/action (Kudu console command) or
+    Microsoft.Web/sites/host/listKeys/action (function keys) gives code-exec / invoke on an App
+    Service or Function.
+  observable:
+    operation_names: [MICROSOFT.WEB/SITES/EXTENSIONS/COMMAND/ACTION, MICROSOFT.WEB/SITES/HOST/LISTKEYS/ACTION]
+    log_class: ACTIVITY_LOG
+  narrowing_invariant: Kudu command / function-key listing by an unexpected principal (this traffic can be routine in CI — allowlist deploy principals).
+  observability_status: OBSERVABLE
+  detection_maturity: hunt
+  references: [https://attack.mitre.org/techniques/T1651/]
