@@ -1,0 +1,57 @@
+id: aws-kms-key-sabotage
+name: KMS key sabotage or public key policy
+cloud: aws
+tactic: defense-evasion
+attack_technique: [T1485]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An attacker disables or schedules deletion of a KMS key (destroying access to all data
+    it protects — S3 SSE, EBS, RDS, Secrets), or rewrites a key policy to grant themselves
+    or the public access to encrypted data.
+  preconditions: >
+    A credential holding kms:DisableKey / kms:ScheduleKeyDeletion / kms:PutKeyPolicy on the key.
+  attacker_controls: [user agent, source IP, tool, timing, key id]
+  invariant: >
+    eventName is DisableKey, ScheduleKeyDeletion, or PutKeyPolicy on a key by a real caller.
+    These are drowned by GenerateDataKey/Decrypt plumbing (often ~70% of KMS volume) — scope
+    to the state-changing verbs, success, eventType=AwsApiCall, non-service callers.
+  operations: [DisableKey, ScheduleKeyDeletion, PutKeyPolicy]
+  variations:
+    - DisableKeyRotation, DeleteAlias (weaker signals)
+    - Deleting the CMK protecting backups before a destructive action (chains into Impact)
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: eventName; requestParameters.keyId / resources[].ARN; requestParameters.policy (for PutKeyPolicy)
+  notes: >
+    Exclude GenerateDataKey and Decrypt, exclude service-invoked calls
+    (userIdentity.invokedBy ~ *.amazonaws.com) and AwsServiceEvent key rotation.
+    Sample (redacted): eventName=ScheduleKeyDeletion, requestParameters.keyId=<key>,
+    pendingWindowInDays=7.
+
+detection:
+  research: { fp_rate: high, logic: "eventSource=kms, readOnly=false, eventName not in (GenerateDataKey, Decrypt)." }
+  hunt: { fp_rate: medium, logic: "eventName in (DisableKey, ScheduleKeyDeletion, PutKeyPolicy); group by underlying role." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      DisableKey / ScheduleKeyDeletion always (near-zero baseline), plus PutKeyPolicy that
+      grants the public ("AWS":"*") or an external/non-org account. Exclude service and
+      service-linked-role callers.
+
+validation_tier: CAPABILITY
+actors: []
+evolution_timeline:
+  - "Ransomware/extortion crews increasingly sabotage KMS to make data unrecoverable; APIs stable."
+related: [aws-cloudtrail-config-tampering, aws-iam-role-trust-external-principal]
+references:
+  - "MITRE ATT&CK T1485 — Data Destruction"
+  - "Threat intel [CAPABILITY + ANALOGUE]: AWS: PoC/research only (e.g. RansomWhen). Real-world key-destruction extortion seen in Azure (Storm-0501, Microsoft, 2025) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

@@ -11,13 +11,18 @@ Manager operation), not tool signatures.
 
 ## Files
 
-| File | Tactic |
+Entries are now **one file per chokepoint**, stored under tactic subfolders as
+`chokepoints/azure/<tactic>/<slug>.yml` and following the unified
+[`templates/chokepoint-template.yml`](../../templates/chokepoint-template.yml) schema.
+
+| Tactic subfolder | Tactic |
 |---|---|
-| `privilege-escalation.yml` | Privilege Escalation (TA0004) |
-| `credential-access.yml` | Credential Access (TA0006) |
-| `defense-evasion.yml` | Defense Evasion (TA0005) |
-| `execution.yml` | Execution (TA0002) |
-| `exfiltration.yml` | Exfiltration / Impact (TA0010 / TA0040) |
+| `privilege-escalation/` | Privilege Escalation (TA0004) |
+| `credential-access/` | Credential Access (TA0006) |
+| `defense-evasion/` | Defense Evasion (TA0005) |
+| `execution/` | Execution (TA0002) |
+| `exfiltration/` | Exfiltration (TA0010) |
+| `impact/` | Impact (TA0040) |
 
 ## The two facts that shape every Azure chokepoint
 

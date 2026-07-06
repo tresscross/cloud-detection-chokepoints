@@ -1,0 +1,59 @@
+id: gcp-network-telemetry-disabled
+name: Telemetry disabled — VPC Flow Logs / DNS logging / project detach
+cloud: gcp
+tactic: defense-evasion
+attack_technique: [T1562.008, T1562.007]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Blinding network/DNS telemetry, or escaping org-level policy+sinks, requires a specific
+    config mutation, all logged in Admin Activity.
+  preconditions: >
+    A credential holding compute.subnetworks.update, dns.policies.delete, or
+    resourcemanager.projects.move.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    subnetworks.patch disabling logConfig; DNS logging policy deleted; MoveProject out of the
+    org (escapes org sinks/policies).
+  operations:
+    - v1.compute.subnetworks.patch    # logConfig.enable=false (VPC Flow Logs off)
+    - dns.policies.delete             # delete DNS query-logging policy
+    - google.cloud.resourcemanager.v3.Projects.MoveProject  # detach from org
+  variations:
+    - Stratus gcp.defense-evasion.remove-vpc-flow-logs
+    - Stratus gcp.defense-evasion.delete-dns-logs
+    - Stratus gcp.defense-evasion.remove-project-from-organization
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    methodName confidence: confirmed (Stratus source)
+
+detection:
+  research: { fp_rate: high, logic: "subnetworks.patch / dns.policies.delete / MoveProject — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      subnetworks.patch disabling logConfig; DNS logging policy deleted; MoveProject out of
+      the org (escapes org sinks/policies).
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      subnetworks.patch disabling logConfig; DNS logging policy deleted; MoveProject out of
+      the org (escapes org sinks/policies); exclude known-benign automation (allowlist from
+      your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.remove-vpc-flow-logs/
+  - "trends/gcp-chokepoint-convergence.md"

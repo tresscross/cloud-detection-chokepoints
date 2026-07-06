@@ -1,0 +1,44 @@
+id: azure-nsg-rule-opened-to-internet
+name: NSG rule opened to the internet
+cloud: azure
+tactic: defense-evasion
+attack_technique: [T1562.007]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Microsoft.Network/networkSecurityGroups/securityRules/write allowing inbound from
+    0.0.0.0/0 / "*" / "Internet" on a sensitive port (22/3389/*) exposes management or
+    service to the world.
+  preconditions: >
+    A principal holding Microsoft.Network/networkSecurityGroups/securityRules/write.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    sourceAddressPrefix in (0.0.0.0/0, *, Internet) + sensitive/any destination port.
+  operations: [MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/SECURITYRULES/WRITE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+  signal_field: request body (sourceAddressPrefix, destinationPortRange) — often in the request body only
+  notes: >
+    The source/port live in the request body; may not always be logged — collect and triage.
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/SECURITYRULES/WRITE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "sourceAddressPrefix in (0.0.0.0/0, *, Internet) + sensitive/any destination port." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      sourceAddressPrefix in (0.0.0.0/0, *, Internet) + sensitive/any destination port; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1562/007/"
+  - "trends/azure-chokepoint-convergence.md"

@@ -1,0 +1,57 @@
+id: gcp-instance-startup-script-attached-sa
+name: Compute instance created with startup-script + attached SA
+cloud: gcp
+tactic: privilege-escalation
+attack_technique: [T1078.004, T1059]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    A VM created with (or patched to add) a startup-script metadata key AND an attached SA runs
+    attacker code with that SA's credentials on first boot.
+  preconditions: >
+    A credential holding compute.instances.create (able to set startup-script metadata and
+    attach a service account).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Request contains a startup-script metadata item AND a non-default/privileged
+    serviceAccounts[].email with broad scopes (cloud-platform); unusual zone; creator who does
+    not normally deploy compute.
+  operations: [v1.compute.instances.insert, v1.compute.instances.setMetadata]  # setMetadata VALIDATE
+  variations: ["gcloud compute instances create --metadata startup-script=..."]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.serviceAccounts;
+    protoPayload.request.metadata
+  notes: >
+    methodName confidence: instances.insert confirmed; setMetadata VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "instances.insert — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Request contains a startup-script metadata item AND a non-default/privileged
+      serviceAccounts[].email with broad scopes (cloud-platform); unusual zone; creator who
+      does not normally deploy compute.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Request contains a startup-script metadata item AND a non-default/privileged
+      serviceAccounts[].email with broad scopes (cloud-platform); unusual zone; creator who
+      does not normally deploy compute; exclude known-benign automation (allowlist from your
+      baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://rhinosecuritylabs.com/gcp/privilege-escalation-google-cloud-platform-part-1/
+  - "trends/gcp-chokepoint-convergence.md"

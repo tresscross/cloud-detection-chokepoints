@@ -1,0 +1,56 @@
+id: gcp-resource-enumeration
+name: Resource enumeration (instances/buckets/service-accounts list)
+cloud: gcp
+tactic: discovery
+attack_technique: [T1580, T1526]
+priority: MEDIUM
+prevalence: HIGH
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    A foothold must enumerate what it can reach — compute, storage, identities — via
+    list/get APIs before acting.
+  preconditions: >
+    A credential holding compute.instances.list / storage.buckets.list /
+    iam.serviceAccounts.list.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    A service-account principal listing storage buckets is a notable anomaly (workload SAs
+    normally access known buckets, not enumerate). Wide fan-out across many resourceNames
+    from one principal.
+  operations: [v1.compute.instances.list, storage.buckets.list, google.iam.admin.v1.ListServiceAccounts]
+  variations: [gcpwn, gcp_scanner, GCPHound]
+
+observability:
+  status: INGEST_GAP
+  log_source: GCP Cloud Audit Log
+  log_class: DATA_ACCESS            # ADMIN_READ — OFF BY DEFAULT
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.requestMetadata.callerIp
+  notes: >
+    Requires Data Access per service; ListServiceAccounts string is convention-based (VALIDATE).
+    methodName confidence: storage.buckets.list confirmed; others VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "instances.list / buckets.list / ListServiceAccounts — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      A service-account principal listing storage buckets is a notable anomaly; wide fan-out
+      across many resourceNames from one principal.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      A service-account principal listing storage buckets is a notable anomaly; wide fan-out
+      across many resourceNames from one principal; exclude known-benign automation (allowlist
+      from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://www.datadoghq.com/blog/monitoring-gcp-audit-logs/
+  - https://attack.mitre.org/techniques/T1580/
+  - "trends/gcp-chokepoint-convergence.md"

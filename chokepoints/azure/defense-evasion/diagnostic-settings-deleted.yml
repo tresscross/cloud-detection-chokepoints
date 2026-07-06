@@ -1,0 +1,40 @@
+id: azure-diagnostic-settings-deleted
+name: Diagnostic settings deleted
+cloud: azure
+tactic: defense-evasion
+attack_technique: [T1562.008]
+priority: HIGH
+prevalence: EMERGING
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Microsoft.Insights/diagnosticSettings/delete removes a resource's log export to Log
+    Analytics / Event Hub / Storage — blinding downstream monitoring. Anti-forensics.
+  preconditions: >
+    A principal holding Microsoft.Insights/diagnosticSettings/delete.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Any delete of a diagnostic setting / log profile (near-zero baseline).
+  operations: [MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE, MICROSOFT.INSIGHTS/LOGPROFILES/DELETE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Any delete of a diagnostic setting / log profile (near-zero baseline)." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Any delete of a diagnostic setting / log profile (near-zero baseline); exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: ["Ransomware crews broadly (log deletion is now standard)"]
+references:
+  - "https://attack.mitre.org/techniques/T1562/008/"
+  - "trends/azure-chokepoint-convergence.md"

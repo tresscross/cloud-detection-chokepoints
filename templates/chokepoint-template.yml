@@ -1,76 +1,61 @@
-# Chokepoint entry template — copy to chokepoints/<tactic>/<slug>.yml
+# Chokepoint entry template — copy to chokepoints/<cloud>/<tactic>/<slug>.yml
 #
-# Field definitions and valid enum values are in schema/chokepoint-schema.md.
-# The spine is: what the attacker controls vs. what they cannot (the invariant).
-# The `observability` block is the Q5 verdict against AWS CloudTrail.
+# ONE file per chokepoint. One schema for every cloud (AWS / GCP / Azure).
+# Field definitions and valid enum values: schema/chokepoint-schema.md
+# The spine is upstream's: what the attacker controls vs. what they cannot (the invariant).
 #
-# Use the AWS canonical example account 123456789012 for "our" account and
-# 210987654321 / 999999999999 for "external". Never real account IDs, IPs, or names.
+# Use placeholder identifiers only (AWS example account 123456789012 / 210987654321;
+# GCP <project-id>; Azure <subscription-id>). Never real accounts, principals, or resources.
 
-id: iam-create-policy-version                 # tactic-prefixed slug, unique repo-wide
-name: IAM policy-version self-escalation
-tactic: privilege-escalation                  # folder under chokepoints/ — see schema
-attack_technique: [T1098.003]
-priority: CRITICAL                            # CRITICAL | HIGH | MEDIUM
-prevalence: HIGH                              # VERY_HIGH | HIGH | MEDIUM | EMERGING
-difficulty: LOW                               # attacker difficulty: LOW | MEDIUM | HIGH
+id: aws-iam-create-policy-version           # <cloud>-<slug>, unique repo-wide (matches file slug)
+name: IAM policy-version self-escalation    # human-readable
+cloud: aws                                  # aws | gcp | azure
+tactic: privilege-escalation                # folder under chokepoints/<cloud>/ — see schema
+attack_technique: [T1098.003]               # MITRE technique IDs
+priority: CRITICAL                          # CRITICAL | HIGH | MEDIUM
+prevalence: HIGH                            # VERY_HIGH | HIGH | MEDIUM | EMERGING
+difficulty: LOW                             # attacker difficulty: LOW | MEDIUM | HIGH
 
-chokepoint:                                   # Q1-Q4, Q6 — the invariant analysis
-  technique: >
-    An identity with iam:CreatePolicyVersion on a managed policy it (or a role it holds)
-    is bound to creates a new policy version granting Action:* / Resource:* and sets it
-    as default, escalating to admin without touching CreateUser / AttachPolicy.
-  preconditions: >
-    Any credential holding iam:CreatePolicyVersion on a customer-managed policy in the
-    escalation path.
-  attacker_controls: [user agent, source IP, CLI vs SDK vs console, timing, policy name]
-  invariant: >
-    eventName is CreatePolicyVersion and the new version's document grants a wildcard
-    action while setAsDefault=true. No tool can reach the outcome without emitting this
-    call with those request parameters.
-  event_names: [CreatePolicyVersion]
+chokepoint:                                 # the invariant analysis (framework Q1-Q4, Q6)
+  technique: >                              # Q1 — what the technique is, technically
+    An identity with iam:CreatePolicyVersion on a managed policy it is bound to creates a new
+    policy version granting Action:* and sets it as default, escalating to admin without
+    touching CreateUser / AttachPolicy.
+  preconditions: >                          # Q2 — credential/permission the attacker must hold
+    A credential holding iam:CreatePolicyVersion on a customer-managed policy in the path.
+  attacker_controls: [user agent, source IP, tool, timing, policy name]   # Q3 — the variables
+  invariant: >                              # Q4 — THE CHOKEPOINT (survives tool rotation)
+    The operation is CreatePolicyVersion and the new version grants a wildcard action with
+    setAsDefault=true. No tool can reach the outcome without this call + those parameters.
+  operations: [CreatePolicyVersion]         # cloud-native op(s): eventName / methodName / operationName
+  variations:                               # Q6 — other API paths to the same outcome
+    - PutRolePolicy / PutUserPolicy (inline wildcard)
+    - AttachRolePolicy with AdministratorAccess
 
-observability:                                # Q5 — against CloudTrail
-  status: OBSERVABLE                          # OBSERVABLE | PARTIAL | INGEST_GAP | CONFIRM
-  cloudtrail_event_category: Management
+observability:                              # Q5 — can we observe it? (against this cloud's audit log)
+  status: OBSERVABLE                        # OBSERVABLE | PARTIAL | INGEST_GAP | CONFIRM
+  log_source: AWS CloudTrail                # AWS CloudTrail | GCP Cloud Audit Log | Azure Activity Log
+  log_class: Management                     # Management/Data | Admin Activity/Data Access | Activity Log/data-plane
   signal_field: requestParameters.policyDocument (+ requestParameters.setAsDefault)
-  ingestion_notes: >
-    IAM writes are low-volume; any occurrence is review-worthy. The wildcard action and
-    setAsDefault live in requestParameters — confirm your parser exposes them (they are
-    NOT always lifted to top-level fields).
+  notes: >                                  # ingestion caveats / field-confidence
+    IAM writes are low-volume; any occurrence is review-worthy. The wildcard + setAsDefault
+    live in requestParameters — confirm your parser exposes them.
 
-detection:                                    # three maturity tiers
-  research:
-    logic: >
-      eventName=CreatePolicyVersion — every occurrence, no filter.
-    fp_rate: high
-  hunt:
-    logic: >
-      As research, plus setAsDefault=true; group by the underlying role
-      (sessionIssuer.userName).
-    fp_rate: medium
+detection:                                  # three maturity tiers
+  research: { fp_rate: high, logic: "operation=CreatePolicyVersion — every occurrence." }
+  hunt: { fp_rate: medium, logic: "setAsDefault=true; group by the underlying role." }
   analyst:
-    logic: >
-      As hunt, plus the policy document grants a wildcard action ("Action":"*"); exclude
-      known IaC deploy roles (allowlist built from YOUR 30-day baseline).
     fp_rate: low
-    severity: HIGH
+    severity: HIGH                          # LOW | MEDIUM | HIGH | CRITICAL (new detections default HIGH)
+    logic: >
+      As hunt, plus the policy document grants a wildcard action; exclude known IaC deploy
+      roles (allowlist built from your own baseline).
 
-variations:                                   # Q6 — other API paths to the same outcome
-  - PutRolePolicy / PutUserPolicy (inline wildcard)   # see iam-inline-policy-self-escalation
-  - AttachRolePolicy with AdministratorAccess         # see iam-privileged-policy-attach
-
+validation_tier: AGGREGATE                  # INCIDENT | AGGREGATE | CAPABILITY | TRANSLATABLE (see trends/)
+actors: []                                  # named actors documented using this chokepoint (if any)
 evolution_timeline:
-  - "Documented as a canonical AWS self-escalation primitive; API + request parameters
-     unchanged since IAM managed-policy versioning launched."
-
-raw_logs:
-  - "eventName=CreatePolicyVersion, readOnly=false, userIdentity.type=AssumedRole,
-     requestParameters.setAsDefault=true, policyDocument Action=* (redacted)."
-
-related:
-  - iam-inline-policy-self-escalation
-  - iam-privileged-policy-attach
-
+  - "Canonical AWS self-escalation primitive; API + request parameters unchanged since managed-policy versioning launched."
+related: [aws-iam-inline-policy-self-escalation, aws-iam-privileged-policy-attach]   # ids of linked chokepoints
 references:
   - "MITRE ATT&CK T1098.003 — Additional Cloud Roles"
+  - "trends/aws-chokepoint-convergence.md"

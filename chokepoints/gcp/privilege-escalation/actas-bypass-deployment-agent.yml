@@ -1,0 +1,57 @@
+id: gcp-actas-bypass-deployment-agent
+name: actAs-bypass via Deployment Manager / Cloud Build default agent
+cloud: gcp
+tactic: privilege-escalation
+attack_technique: [T1078.004]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Deployment Manager runs as <project-number>@cloudservices.gserviceaccount.com (Editor by
+    default) and Cloud Build as <project-number>@cloudbuild.gserviceaccount.com; neither checks
+    actAs. So creating a deployment/build lets a low-priv principal act with the
+    Editor-privileged agent.
+  preconditions: >
+    A credential holding deploymentmanager.deployments.create or cloudbuild.builds.create
+    (neither enforces actAs).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    deployments.insert / CreateBuild by an unusual (non-CI, non-automation) principal, or whose
+    config provisions IAM bindings / reads the metadata server / exfils a token. Because actAs
+    is not required, mere use by a low-priv principal is the finding.
+  operations: [v2.deploymentmanager.deployments.insert, google.devtools.cloudbuild.v1.CloudBuild.CreateBuild]
+  variations: ["Rhino Cloud Build RCE->IAM escalation", "deploymentmanager.deployments.create privesc"]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.*
+  notes: >
+    methodName confidence: CreateBuild confirmed; deployments.insert single-source (VALIDATE)
+
+detection:
+  research: { fp_rate: high, logic: "deployments.insert / CreateBuild — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      deployments.insert / CreateBuild by an unusual (non-CI, non-automation) principal, or
+      whose config provisions IAM bindings / reads the metadata server / exfils a token.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      deployments.insert / CreateBuild by an unusual (non-CI, non-automation) principal, or
+      whose config provisions IAM bindings / reads the metadata server / exfils a token;
+      exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://rhinosecuritylabs.com/gcp/iam-privilege-escalation-gcp-cloudbuild/
+  - https://rhinosecuritylabs.com/gcp/privilege-escalation-google-cloud-platform-part-1/
+  - "trends/gcp-chokepoint-convergence.md"

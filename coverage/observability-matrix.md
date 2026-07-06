@@ -1,11 +1,14 @@
 # Observability matrix
 
-Framework **Q5 — "can we observe it?"** — as a reference table. For each chokepoint: the
-CloudTrail event(s), the event category, where the discriminating signal lives, and the
-common ingestion gaps that decide whether a detection is buildable.
+Framework **Q5 — "can we observe it?"** — as a reference table, one section per cloud (AWS
+CloudTrail · GCP Cloud Audit · Azure Activity Log). For each chokepoint: the operation
+(`eventName` / `methodName` / `operationName`), its log class, where the discriminating signal
+lives, and the ingestion gaps that decide whether a detection is buildable.
 
-This is a **generic** reference. Your environment's answer to Q5 depends on your trail
-configuration and your SIEM parser — always confirm with a live query.
+This is a **generic** reference. Your environment's answer to Q5 depends on your logging
+configuration and your SIEM parser — always confirm with a live query. The recurring theme
+across all three clouds: **read/data-plane logging is off by default** (AWS S3 GetObject, GCP
+Data Access, Azure resource diagnostics) — those chokepoints are `INGEST_GAP` until enabled.
 
 ## Event → signal → buildability
 

@@ -1,0 +1,64 @@
+id: aws-cloudtrail-config-tampering
+name: CloudTrail / Config / FlowLog tampering
+cloud: aws
+tactic: defense-evasion
+attack_technique: [T1562.008]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An attacker blinds the environment by stopping or deleting the audit sources — the very
+    logs your detections depend on. To reduce logging they must call one of a finite set of
+    logging/monitoring control-plane APIs, which is itself logged (the last thing that is).
+  preconditions: >
+    A credential holding the relevant cloudtrail:/config:/ec2:/guardduty: management permission.
+  attacker_controls: [user agent, source IP, tool, timing, trail/recorder/flowlog id]
+  invariant: >
+    eventName is one of the logging/detection-disabling calls. Base rate is near-zero in a
+    steady environment; any occurrence is review-worthy.
+  operations:
+    - StopLogging
+    - DeleteTrail
+    - UpdateTrail
+    - PutEventSelectors
+    - StopConfigurationRecorder
+    - DeleteDeliveryChannel
+    - DeleteFlowLogs
+    - DisassociateFromAdministratorAccount
+  variations:
+    - DeleteLogGroup / DeleteLogStream (CloudWatch Logs)
+    - Disabling GuardDuty detectors / suspending members
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: eventName; requestParameters (trail/recorder/detector id)
+  notes: >
+    UpdateTrail/PutEventSelectors can be legitimate config management — the sabotage signal
+    is disabling multi-region, disabling log-file validation, or narrowing event selectors;
+    inspect requestParameters. StopConfigurationRecorder/DeleteDeliveryChannel are stronger.
+    Sample (redacted): eventName=StopLogging, requestParameters.name=<trail>.
+
+detection:
+  research: { fp_rate: high, logic: "eventName in the logging/detection-tampering set — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Group by underlying role; flag StopLogging / DeleteTrail / Stop* / Delete* first." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Alert on any of the disabling verbs by a non-service principal; for UpdateTrail /
+      PutEventSelectors require the change to weaken coverage (multi-region off, validation
+      off, selectors narrowed). Exclude known IaC-managed trail lifecycle (allowlist).
+
+validation_tier: INCIDENT
+actors: [LUCR-3, SCARLETEEL]
+evolution_timeline:
+  - "First move of many hands-on-keyboard cloud intrusions; APIs stable."
+related: [aws-kms-key-sabotage]
+references:
+  - "MITRE ATT&CK T1562.008 — Impair Defenses: Disable or Modify Cloud Logs"
+  - "Threat intel [INCIDENT]: LUCR-3 (DeleteTrail/StopLogging) and SCARLETEEL (StopLogging) disabled CloudTrail (Permiso/Sysdig, 2023) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

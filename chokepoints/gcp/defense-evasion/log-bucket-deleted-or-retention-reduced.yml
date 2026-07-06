@@ -1,0 +1,56 @@
+id: gcp-log-bucket-deleted-or-retention-reduced
+name: Log bucket deletion / retention reduction
+cloud: gcp
+tactic: defense-evasion
+attack_technique: [T1562.008, T1485]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Destroying already-written logs means deleting the log bucket or slashing its
+    retention/lifecycle. Both are logged Admin Activity mutations.
+  preconditions: >
+    A credential holding logging.buckets.delete / logging.buckets.update (or
+    storage.buckets.update on the sink's target bucket).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Retention reduced to a very short window, or delete of a log/_Required bucket; GCS
+    lifecycle rule set to age=1 day on a sink-target bucket.
+  operations:
+    - google.logging.v2.ConfigServiceV2.DeleteBucket
+    - google.logging.v2.ConfigServiceV2.UpdateBucket
+    - storage.buckets.update        # 1-day GCS lifecycle on the sink's bucket
+  variations: [Stratus gcp.defense-evasion.reduce-sink-log-retention]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    methodName confidence: DeleteBucket/UpdateBucket confirmed; UpdateBucketAsync secondary
+
+detection:
+  research: { fp_rate: high, logic: "DeleteBucket / UpdateBucket — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Retention reduced to a very short window, or delete of a log/_Required bucket; GCS
+      lifecycle rule set to age=1 day on a sink-target bucket.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Retention reduced to a very short window, or delete of a log/_Required bucket; GCS
+      lifecycle rule set to age=1 day on a sink-target bucket; exclude known-benign
+      automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.reduce-sink-log-retention/
+  - "trends/gcp-chokepoint-convergence.md"

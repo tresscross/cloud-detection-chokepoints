@@ -1,0 +1,41 @@
+id: azure-vm-run-command
+name: VM run-command execution
+cloud: azure
+tactic: execution
+attack_technique: [T1651]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Microsoft.Compute/virtualMachines/runCommand/action (and the managed runCommands/write
+    variant) executes arbitrary commands on a VM through the control plane — no guest network
+    access needed. The Azure analogue of AWS SSM SendCommand.
+  preconditions: >
+    A principal holding Microsoft.Compute/virtualMachines/runCommand/action.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Any run-command by a non-automation principal (near-zero baseline).
+  operations: [MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND/ACTION, MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMANDS/WRITE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.COMPUTE/VIRTUALMACHINES/RUNCOMMAND/ACTION — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Any run-command by a non-automation principal (near-zero baseline)." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Any run-command by a non-automation principal (near-zero baseline); exclude known-benign
+      automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: ["Hands-on-keyboard operators pivoting from control plane to guest"]
+references:
+  - "https://attack.mitre.org/techniques/T1651/"
+  - "trends/azure-chokepoint-convergence.md"

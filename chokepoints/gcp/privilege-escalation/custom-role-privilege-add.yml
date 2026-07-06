@@ -1,0 +1,52 @@
+id: gcp-custom-role-privilege-add
+name: Custom role updated to add privileges
+cloud: gcp
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    An attacker holding a custom role and iam.roles.update can add permissions to that role,
+    escalating without any new binding.
+  preconditions: >
+    A credential holding iam.roles.update on a custom role it is bound to.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    includedPermissions expands to add *.setIamPolicy, iam.serviceAccounts.actAs, or
+    iam.serviceAccountKeys.create — while the editor is bound to that role.
+  operations: [google.iam.admin.v1.UpdateRole]   # VALIDATE
+  variations: ["gcloud iam roles update"]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.role.includedPermissions
+  notes: >
+    methodName confidence: VALIDATE (assumed FQ form)
+
+detection:
+  research: { fp_rate: high, logic: "UpdateRole — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      includedPermissions expands to add *.setIamPolicy, iam.serviceAccounts.actAs, or
+      iam.serviceAccountKeys.create — while the editor is bound to that role.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      includedPermissions expands to add *.setIamPolicy, iam.serviceAccounts.actAs, or
+      iam.serviceAccountKeys.create — while the editor is bound to that role; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://github.com/RhinoSecurityLabs/GCP-IAM-Privilege-Escalation
+  - "trends/gcp-chokepoint-convergence.md"

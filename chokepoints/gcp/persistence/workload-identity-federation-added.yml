@@ -1,0 +1,56 @@
+id: gcp-workload-identity-federation-added
+name: Workload Identity Federation / external IdP provider added
+cloud: gcp
+tactic: persistence
+attack_technique: [T1136, T1484]
+priority: HIGH
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    To let an external identity (attacker-controlled OIDC/SAML) impersonate a SA without a
+    key, an attacker adds a workload identity pool/provider. GTIG warns OIDC/federation trust
+    is an increasingly targeted persistence vector.
+  preconditions: >
+    A credential holding iam.workloadIdentityPools.create /
+    iam.workloadIdentityPoolProviders.create.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    New pool/provider whose issuer or allowed audience/subject points at an external/attacker
+    IdP; provider added then SA tokenCreator granted to the external principal.
+  operations:
+    - google.iam.v1.WorkloadIdentityPools.CreateWorkloadIdentityPool          # VALIDATE
+    - google.iam.v1.WorkloadIdentityPools.CreateWorkloadIdentityPoolProvider  # VALIDATE
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.*
+  notes: >
+    methodName confidence: VALIDATE (FQ strings assumed)
+
+detection:
+  research: { fp_rate: high, logic: "CreateWorkloadIdentityPool / CreateWorkloadIdentityPoolProvider — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      New pool/provider whose issuer or allowed audience/subject points at an
+      external/attacker IdP; provider added then SA tokenCreator granted to the external
+      principal.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      New pool/provider whose issuer or allowed audience/subject points at an
+      external/attacker IdP; provider added then SA tokenCreator granted to the external
+      principal; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: TRANSLATABLE
+actors: ["UNC6426 pattern (GitHub->cloud OIDC trust abused to mint admin) - AWS-documented, translatable to GCP WIF"]
+related: []
+references:
+  - https://cloud.google.com/security/report/resources/cloud-threat-horizons-report-h1-2026
+  - "trends/gcp-chokepoint-convergence.md"

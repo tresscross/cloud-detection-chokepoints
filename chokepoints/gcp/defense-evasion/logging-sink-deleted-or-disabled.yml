@@ -1,0 +1,57 @@
+id: gcp-logging-sink-deleted-or-disabled
+name: Logging sink deletion or disable
+cloud: gcp
+tactic: defense-evasion
+attack_technique: [T1562.008]
+priority: CRITICAL
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    To stop log export to a SIEM/bucket, an attacker deletes or disables the log sink. The
+    sink mutation is itself logged in Admin Activity.
+  preconditions: >
+    A credential holding logging.sinks.delete / logging.sinks.update.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Any delete, or UpdateSink setting disabled=true, on an org/prod aggregated or security
+    sink. Near-zero legitimate rate — alert on all.
+  operations:
+    - google.logging.v2.ConfigServiceV2.DeleteSink
+    - google.logging.v2.ConfigServiceV2.UpdateSink   # with disabled=true
+  variations:
+    - Stratus gcp.defense-evasion.delete-logging-sink
+    - Stratus gcp.defense-evasion.disable-logging-sink
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName;
+    protoPayload.request.sink.disabled
+  notes: >
+    methodName confidence: confirmed
+
+detection:
+  research: { fp_rate: high, logic: "DeleteSink / UpdateSink — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Any delete, or UpdateSink setting disabled=true, on an org/prod aggregated or security
+      sink. Near-zero legitimate rate.
+  analyst:
+    fp_rate: low
+    severity: CRITICAL
+    logic: >
+      Any delete, or UpdateSink setting disabled=true, on an org/prod aggregated or security
+      sink; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: AGGREGATE
+actors: ["Ransomware crews broadly (GTIG H2 2025)"]
+related: []
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.defense-evasion.delete-logging-sink/
+  - https://attack.mitre.org/techniques/T1562/008/
+  - "trends/gcp-chokepoint-convergence.md"

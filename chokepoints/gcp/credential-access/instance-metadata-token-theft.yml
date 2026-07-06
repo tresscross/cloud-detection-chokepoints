@@ -1,0 +1,55 @@
+id: gcp-instance-metadata-token-theft
+name: Compute instance metadata token theft (SA token from 169.254.169.254)
+cloud: gcp
+tactic: credential-access
+attack_technique: [T1552.005]
+priority: HIGH
+prevalence: HIGH
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    An in-VM foothold that wants the attached SA's token reads it from the metadata service;
+    remote harvesting reads startup-script/metadata via the Compute API.
+  preconditions: >
+    A credential holding compute.instances.get / compute.instances.list (or an in-VM foothold
+    with access to the metadata service).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Same SA token later seen from a non-Google callerIp (correlate with
+    gcp-valid-account-control-plane use-compute-sa-outside-gcp); bulk instance metadata pulls.
+  operations: [compute.instances.get, compute.instances.list]
+  variations:
+    - Stratus gcp.discovery.download-instance-metadata
+    - Stratus gcp.initial-access.use-compute-sa-outside-gcp
+
+observability:
+  status: INGEST_GAP
+  log_source: GCP Cloud Audit Log
+  log_class: DATA_ACCESS            # ADMIN_READ for get/list — OFF BY DEFAULT
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.requestMetadata.callerIp
+  notes: >
+    In-VM 169.254.169.254 reads are never logged; get/list are Data Access.
+    methodName confidence: confirmed
+
+detection:
+  research: { fp_rate: high, logic: "compute.instances.get / compute.instances.list — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Same SA token later seen from a non-Google callerIp; bulk instance metadata pulls.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Same SA token later seen from a non-Google callerIp; bulk instance metadata pulls;
+      exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: [gcp-valid-account-control-plane]
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.discovery.download-instance-metadata/
+  - https://attack.mitre.org/techniques/T1552/005/
+  - "trends/gcp-chokepoint-convergence.md"

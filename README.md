@@ -3,53 +3,133 @@
 > **TTPs evolve. Chokepoints don't.**
 
 A catalog of **invariant control-plane prerequisites** for cloud attack techniques — the
-mandatory API calls an attacker *cannot avoid* regardless of the tool they use — and the
-detections that anchor to them. Currently covers **AWS (CloudTrail)**, **GCP (Cloud
-Audit Logs)**, and **Azure (Activity Log)**.
+mandatory API calls an attacker *cannot avoid* regardless of tooling — and the detections that
+anchor to them. Covers **AWS (CloudTrail)**, **GCP (Cloud Audit Logs)**, and **Azure (Activity
+Log)**: **58 chokepoints across 3 clouds and 10 ATT&CK tactics.**
 
-This project applies the [detection-chokepoints](https://github.com/iimp0ster/detection-chokepoints)
+Applies the [iimp0ster/detection-chokepoints](https://github.com/iimp0ster/detection-chokepoints)
 methodology (built for EDR/endpoint) to **cloud control-plane logs** — AWS CloudTrail
-`eventName`s, GCP Cloud Audit `protoPayload.methodName`s, and Azure Activity Log
-`operationName`s. Instead of chasing tool
-signatures, user agents, or IOCs that rotate faster than we can write rules, we anchor
-detections to the *unavoidable technical requirements* of each technique: every cloud
-intrusion must authenticate, obtain or mint credentials, enumerate what it has, escalate
-or move via IAM, and touch data or persistence through a **finite set of control-plane
-APIs**.
+`eventName`s, GCP Cloud Audit `methodName`s, Azure Activity Log `operationName`s.
 
 ---
 
-## The idea
+## Why this exists
 
-A **chokepoint** is a technical prerequisite an attacker cannot design around. Ransomware
-crews, infostealers, and hands-on-keyboard operators all converge on the *same* handful of
-AWS APIs — `CreatePolicyVersion`, `UpdateAssumeRolePolicy`, `CreateAccessKey`,
-`ModifySnapshotAttribute`, `PutBucketPolicy`, `StopLogging` — because the AWS control plane
-gives them no other path to the outcome. Tool choice is variable; the CloudTrail
-`eventName` and its request parameters are not.
+Threat-actor tooling rotates constantly; the underlying technical requirements don't. Kaspersky
+analysed eight major ransomware operations and found they converged on the same core kill chain
+— the tools differed, the requirements didn't. The same holds in the cloud: ransomware crews,
+access brokers, cryptominers, and hands-on-keyboard operators all funnel through the same handful
+of control-plane APIs — `CreatePolicyVersion`, `SetIamPolicy`, `roleAssignments/write`,
+`CreateServiceAccountKey`, `ModifySnapshotAttribute`, `StopLogging`, `DeleteSink`,
+`diagnosticSettings/delete` — because the platform gives them no other path to the outcome.
 
-Detections built on chokepoints survive tool rotation. A rule that keys on a specific
-offensive tool's user agent dies the day the attacker recompiles. A rule that keys on
-*"a new default IAM policy version granting `Action:*`"* fires no matter what tool wrote it.
+A rule keyed on an offensive tool's signature dies when the tool recompiles. A rule keyed on the
+invariant — *"a new default IAM policy version granting `Action:*`"* — fires no matter what wrote
+it. See [`trends/`](trends/) for the campaign-by-campaign evidence.
 
-## The six-question framework
+## Chokepoint index
 
-Adapted from Matt Graeber's approach, applied to every entry in this repo:
+Every entry lives at `chokepoints/<cloud>/<tactic>/<slug>.yml` and carries a `validation_tier`
+(**INCIDENT** = named actor observed in this cloud · **AGGREGATE** = prevalent in vendor
+telemetry · **CAPABILITY** = feasible/PoC, not yet an attributed incident · **TRANSLATABLE** =
+seen in another cloud). **`[blind]`** = observable only after read/data-plane logging is enabled
+(see [Observability](#observability--the-read-log-gap)).
 
-1. **What is the technique, technically?** — which AWS APIs / auth flows.
-2. **What preconditions enable it?** — credential type, permission set already held.
-3. **What does the attacker control?** — user agent, source IP, tool, timing, names.
-4. **What can't the attacker control?** ← **the chokepoint** — the mandatory CloudTrail
-   `eventName`(s) plus the narrowing invariant (a wildcard action, an external principal,
-   an off-instance credential use, a new principal pair).
-5. **Can we observe it?** — is the event in CloudTrail, and does the discriminating field
-   survive to your SIEM? (See [`coverage/`](coverage/).)
-6. **What are all the variations?** — every API path that reaches the same outcome
-   (e.g. the PassRole family across `RunInstances`, `CreateFunction`, `CreateStack`, …).
+### AWS — CloudTrail (15)
 
-**Qualification test for any detection:** *"If the attacker switches tools tomorrow, does
-this still fire?"* If it keys on a tool signature, UA, IP, or session name — it's not a
-chokepoint. Move the anchor to the invariant.
+| Chokepoint | Tactic | Priority | Tier |
+|---|---|---|---|
+| IAM policy-version self-escalation | privilege-escalation | CRITICAL | AGGREGATE |
+| Inline-policy self-escalation | privilege-escalation | CRITICAL | AGGREGATE |
+| Privileged managed-policy attach | privilege-escalation | HIGH | INCIDENT |
+| Role trust policy grants external principal | persistence | HIGH | INCIDENT |
+| Federation / IdP backdoor | persistence | HIGH | CAPABILITY |
+| EventBridge rule → cross-account target | persistence | MEDIUM | CAPABILITY |
+| Secrets Manager read by human/unknown principal | credential-access | HIGH | INCIDENT |
+| IAM / account enumeration burst | discovery | MEDIUM | INCIDENT |
+| CloudTrail / Config / FlowLog tampering | defense-evasion | HIGH | INCIDENT |
+| KMS key sabotage or public key policy | defense-evasion | HIGH | CAPABILITY |
+| Cross-account AssumeRole from new external principal | lateral-movement | MEDIUM | AGGREGATE |
+| Console sign-in anomaly (MFA bypass / foreign geo) | initial-access | HIGH | AGGREGATE |
+| EBS snapshot / AMI shared to external account | exfiltration | HIGH | AGGREGATE |
+| S3 ransomware via SSE-C encryption-in-place | impact | HIGH | INCIDENT |
+| SES sending / identity abuse | impact | MEDIUM | INCIDENT |
+
+### GCP — Cloud Audit Logs (29)
+
+| Chokepoint | Tactic | Priority | Tier |
+|---|---|---|---|
+| setIamPolicy self/external privileged grant | privilege-escalation | CRITICAL | INCIDENT |
+| Backdoor a service account (grant TokenCreator) | privilege-escalation | CRITICAL | CAPABILITY |
+| Attach privileged service account (actAs / PassRole-analog) | privilege-escalation | CRITICAL | CAPABILITY |
+| actAs-bypass via Deployment Manager / Cloud Build agent | privilege-escalation | HIGH | CAPABILITY |
+| Instance created with startup-script + attached SA | privilege-escalation | HIGH | CAPABILITY |
+| Org policy constraint weakened | privilege-escalation | HIGH | CAPABILITY |
+| Custom role updated to add privileges | privilege-escalation | MEDIUM | CAPABILITY |
+| Service-account key creation | credential-access | CRITICAL | INCIDENT |
+| SA impersonation — token minting / signing | credential-access | CRITICAL | CAPABILITY `[blind]` |
+| Secret Manager secret access | credential-access | HIGH | CAPABILITY `[blind]` |
+| Instance metadata SA-token theft | credential-access | HIGH | CAPABILITY `[blind]` |
+| New service account created and keyed | persistence | HIGH | CAPABILITY |
+| Workload Identity Federation / external IdP added | persistence | HIGH | TRANSLATABLE |
+| SSH key added to project/instance metadata | persistence | MEDIUM | CAPABILITY |
+| Serverless / scheduled backdoor | persistence | MEDIUM | CAPABILITY |
+| Logging sink deletion or disable | defense-evasion | CRITICAL | AGGREGATE |
+| Log bucket deletion / retention reduction | defense-evasion | HIGH | CAPABILITY |
+| Audit logging disabled via auditConfig | defense-evasion | HIGH | CAPABILITY |
+| Telemetry disabled (VPC Flow / DNS / project detach) | defense-evasion | MEDIUM | CAPABILITY |
+| Firewall opened to the world | defense-evasion | MEDIUM | CAPABILITY |
+| IAM permission brute-forcing | discovery | HIGH | CAPABILITY `[blind]` |
+| Org-wide asset enumeration (Cloud Asset Inventory) | discovery | MEDIUM | CAPABILITY `[blind]` |
+| Resource enumeration | discovery | MEDIUM | CAPABILITY `[blind]` |
+| Valid stolen account vs control plane | initial-access | CRITICAL | INCIDENT |
+| Cross-project data transfer via resource IAM sharing | exfiltration | HIGH | INCIDENT |
+| Bulk object read from Cloud Storage | exfiltration | HIGH | CAPABILITY `[blind]` |
+| Resource hijacking — cryptomining compute | impact | HIGH | INCIDENT |
+| GCS bucket / object made public | impact | HIGH | CAPABILITY |
+| Data destruction / ransomware | impact | HIGH | CAPABILITY |
+
+### Azure — Activity Log (14)
+
+| Chokepoint | Tactic | Priority | Tier |
+|---|---|---|---|
+| Elevate access to all subscriptions (tenant-wide) | privilege-escalation | CRITICAL | CAPABILITY |
+| RBAC role assignment created | privilege-escalation | HIGH | INCIDENT |
+| Custom role definition created/modified | privilege-escalation | MEDIUM | CAPABILITY |
+| Key Vault access policy / vault write | credential-access | HIGH | CAPABILITY |
+| Storage account key regenerated | credential-access | MEDIUM | CAPABILITY |
+| Key Vault secret read | credential-access | HIGH | CAPABILITY `[blind]` |
+| Diagnostic settings deleted | defense-evasion | HIGH | CAPABILITY |
+| NSG rule opened to the internet | defense-evasion | HIGH | CAPABILITY |
+| Defender for Cloud / auto-provisioning disabled | defense-evasion | MEDIUM | CAPABILITY |
+| VM run-command execution | execution | HIGH | CAPABILITY |
+| App Service (Kudu) command / function keys | execution | MEDIUM | CAPABILITY |
+| Managed disk exported via SAS | exfiltration | HIGH | CAPABILITY |
+| Storage bulk blob read | exfiltration | HIGH | CAPABILITY `[blind]` |
+| Backup / recovery destruction | impact | HIGH | INCIDENT |
+
+## Attack chains
+
+Different crews, different tools, the same control-plane path. See
+[`attack-chains/`](attack-chains/) for the worked cloud-account-takeover chain (initial access →
+enumeration → credential access → escalation → persistence → defense evasion → exfiltration →
+impact), each stage annotated with the chokepoint that fires. The highest-leverage five sit on
+nearly every playbook: enumeration burst, the three privilege-escalation primitives, and the
+role/trust-policy persistence move.
+
+## The framework
+
+Six questions per chokepoint (adapted from the upstream methodology):
+
+1. What is the technique, technically?
+2. What preconditions enable it?
+3. What does the attacker control? (user agent, IP, tool, timing, names)
+4. **What can't the attacker control?** ← the chokepoint (the mandatory operation + narrowing invariant)
+5. Can we observe it? (is the operation in the audit log, and does the discriminating field survive?)
+6. What are all the variations? (every API path to the same outcome)
+
+**Qualification gate:** *If the attacker switches tools tomorrow, does the detection still fire?*
+If it keys on a tool/UA/IP/session name, it isn't a chokepoint — move the anchor to the invariant.
 
 ## Detection maturity model
 
@@ -58,170 +138,67 @@ Every chokepoint carries detection logic at three tiers:
 | Tier | FP rate | Purpose |
 |---|---|---|
 | **Research** | high | Establish baseline visibility — every occurrence, minimal filter. |
-| **Hunt** | medium | Add the narrowing invariant + grouping; reduce noise, keep coverage. |
-| **Analyst** | low | Production alert — tightest invariant + allowlists built from *your own* baseline data. |
+| **Hunt** | medium | Add the narrowing invariant + grouping. |
+| **Analyst** | low | Production alert — tightest invariant + allowlists built from *your own* baseline; carries severity. |
 
-The promotion path is deliberate: baseline with Research, learn your environment's noise,
-tune to Hunt, and only promote to Analyst once the false-positive sources are understood
-and allowlisted from **real** data — never guesses.
+Portable [Sigma](https://github.com/SigmaHQ/sigma) rules for the buildable chokepoints are in
+[`sigma-rules/`](sigma-rules/) (`<cloud>_<slug>.yml`).
 
----
+## Observability — the read-log gap
 
-## Repository layout
+The recurring cloud truth: **write/control-plane operations are logged by default; read/data-plane
+operations are not.** Each cloud has the same gap, and it blocks the same chokepoint cluster
+(secret reads, object-read exfil, impersonation, recon):
+
+| Cloud | Always on | Off by default (`[blind]`) |
+|---|---|---|
+| AWS | CloudTrail management events | S3 `GetObject` / data events |
+| GCP | Admin Activity + System Event | Data Access logs (secretmanager, storage, iamcredentials, …) |
+| Azure | Activity Log (control-plane) | Resource/data-plane diagnostic logs (Key Vault, Storage) |
+
+`[blind]` entries in the index above are `observability.status: INGEST_GAP` — real chokepoints,
+detectable only after the relevant read-logging is enabled. The full event → invariant →
+buildability reference is [`coverage/observability-matrix.md`](coverage/observability-matrix.md).
+
+## Trends (threat-intel backing)
+
+[`trends/`](trends/) maps real, publicly-documented campaigns to the chokepoints they were forced
+to touch — one convergence doc per cloud (AWS, GCP, Azure), each with a validation-tier table and
+aggregate stats (CrowdStrike, Datadog, Unit 42, Sysdig, Mandiant, Google Threat Horizons,
+Microsoft MSTIC). We label honestly: 14 chokepoints are **INCIDENT**-validated, the rest are
+**AGGREGATE**/**CAPABILITY**/**TRANSLATABLE** — and the doc says which, and why.
+
+## Repository structure
 
 ```
-chokepoints/        AWS entries, one per chokepoint, organised by ATT&CK tactic.
-                    Each carries the Q1–Q6 invariant analysis, prevalence/difficulty,
-                    tool variations, observability notes, and 3-tier detection logic.
-chokepoints/gcp/    GCP entries, grouped by ATT&CK tactic, anchored to Cloud Audit
-                    methodName + audit-log class (Admin Activity vs Data Access).
-chokepoints/azure/  Azure entries, grouped by ATT&CK tactic, anchored to Activity Log
-                    operationName + log class (Activity Log vs data-plane).
-sigma-rules/        Portable Sigma detections (product=aws|gcp|azure).
-trends/             Threat-intel convergence evidence — AWS + GCP + Azure, real campaigns mapped to chokepoints.
-attack-chains/      Actor-convergence analyses — which groups share which chokepoints.
-coverage/           Observability reference: which CloudTrail events carry the signal,
-                    which field the invariant lives in, and common ingestion gaps.
-emulation/          Safe, lab-only validation commands (aws-cli + stratus-red-team refs).
-schema/             Field definitions and valid enum values for chokepoint entries.
-templates/          Contribution template.
+chokepoints/<cloud>/<tactic>/<slug>.yml   One file per chokepoint (aws | gcp | azure).
+sigma-rules/                              Portable Sigma detections, <cloud>_<slug>.yml.
+trends/                                   Threat-intel convergence evidence, one doc per cloud.
+attack-chains/                            Kill-chain docs mapping stages to chokepoints.
+coverage/observability-matrix.md          Event → invariant → buildability, per cloud.
+emulation/                                Safe, lab-only validation commands.
+schema/                                   Entry schema + valid enum values.
+templates/                                chokepoint-template.yml, quick-add.md, EXAMPLE-WORKFLOW.md.
 ```
 
-## The AWS chokepoint catalog
+## How to use
 
-Control-plane invariants grouped by ATT&CK tactic. ✅ = worked entry in this repo.
-
-| Tactic | Chokepoints |
-|---|---|
-| **Initial Access** | ✅ Console login (MFA anomaly / impossible geo) · Federated sign-in anomaly |
-| **Credential Access** | ✅ Secrets Manager mass read · Long-lived key use · EC2 role creds used off-instance · STS token minting |
-| **Discovery** | ✅ IAM/account enumeration burst · Bucket enumeration · Whoami orientation |
-| **Privilege Escalation** | ✅ Policy-version wildcard · ✅ Inline-policy self-escalation · ✅ Privileged managed-policy attach · PassRole family (compute-with-role) · Login profile for another user |
-| **Persistence** | ✅ Role trust-policy external principal · ✅ Federation/IdP backdoor · Backdoor identity · ✅ Event-driven backdoor |
-| **Defense Evasion** | ✅ CloudTrail/Config/FlowLog tampering · ✅ KMS key sabotage |
-| **Lateral Movement** | ✅ Cross-account AssumeRole to new principal · Stolen-session use (impossible travel) |
-| **Exfiltration** | ✅ Snapshot/AMI shared external · S3 cross-account replication · S3 made public · S3 bulk object read |
-| **Impact** | ✅ SES sending/identity abuse · ✅ S3 SSE-C ransomware · Backup/snapshot destruction · Resource hijack (cryptomining) |
-
-See [`coverage/observability-matrix.md`](coverage/observability-matrix.md) for the full
-event → invariant → buildability reference.
-
-## The GCP chokepoint catalog
-
-GCP control-plane invariants, anchored to Cloud Audit `protoPayload.methodName` and grouped
-by tactic in [`chokepoints/gcp/`](chokepoints/gcp/) (29 entries). Two facts shape every GCP
-entry:
-
-- **Admin Activity logs are always on; Data Access logs are OFF by default** (only BigQuery
-  reads are on) — the direct analogue of the AWS "S3 GetObject not ingested" gap. Each entry
-  records which class its `methodName` lands in. Impersonation (`GenerateAccessToken`), secret
-  reads (`AccessSecretVersion`), recon (`testIamPermissions`), and object-read exfil
-  (`storage.objects.get`) are **blind until Data Access logging is enabled**.
-- **`iam.serviceAccounts.actAs` has no audit event of its own** — the GCP PassRole analogue —
-  so impersonation-via-attach is only visible through the *host* resource-create event.
-
-| Tactic | GCP chokepoints (buildable on Admin Activity in bold) |
-|---|---|
-| Initial Access | Valid/stolen account, federated sign-in |
-| Credential Access | **SA key creation** · SA impersonation*, Secret Manager read*, metadata token theft* |
-| Discovery | testIamPermissions*, Cloud Asset SearchAll*, resource enumeration* |
-| Privilege Escalation | **setIamPolicy grant**, **SA-policy backdoor**, actAs-attach, **DM/Cloud Build actAs-bypass**, custom-role, org-policy |
-| Persistence | **new SA + key**, WIF/external IdP, SSH-key-to-metadata, serverless backdoor |
-| Defense Evasion | **logging sink delete/disable**, **log bucket delete**, audit-config disable, **firewall to world** |
-| Impact / Exfil | **crypto-mining burst**, cross-project sharing, **GCS made public**, bulk object read*, data destruction |
-
-\* = **blind by default** (Data Access log gap). See
-[`trends/gcp-chokepoint-convergence.md`](trends/gcp-chokepoint-convergence.md) for the GCP
-actor-convergence evidence and [`coverage/observability-matrix.md`](coverage/observability-matrix.md)
-for the full buildable-vs-blocked split.
-
-## The Azure chokepoint catalog
-
-Azure control-plane invariants, anchored to Azure Activity Log `operationName` and grouped by
-tactic in [`chokepoints/azure/`](chokepoints/azure/) (14 entries). **Scope is Azure
-resource/control-plane; Entra ID / Azure AD identity is a separate source and out of scope.**
-Two facts shape every entry:
-
-- **Activity Log (control-plane) is always on; resource/data-plane logs are OFF by default**
-  (per-resource diagnostic settings → Log Analytics) — the Azure analogue of the S3-GetObject
-  / GCP-Data-Access gap. **Key Vault secret reads** (`SecretGet`) and **bulk blob reads**
-  (`GetBlob`) are **blind by default**.
-- **`roleAssignments/write` doesn't cleanly log the granted role/principal** — only the
-  caller's authorizing role — so narrowing to "Owner granted to X" needs request-body inspection.
-
-| Tactic | Azure chokepoints (buildable on Activity Log in bold) |
-|---|---|
-| Privilege Escalation | **RBAC role assignment**, **elevate-access (tenant-wide)**, **custom role** |
-| Credential Access | **storage key regen / listKeys**, Key Vault access-policy, Key Vault secret read* |
-| Defense Evasion | **diagnostic-settings delete**, **NSG rule to internet**, Defender disable |
-| Execution | **VM run-command**, App Service Kudu / function keys |
-| Exfiltration / Impact | **managed-disk export SAS**, bulk blob read*, backup/recovery destruction |
-
-\* = **blind by default** (data-plane diagnostic-log gap). See
-[`trends/azure-chokepoint-convergence.md`](trends/azure-chokepoint-convergence.md) and the
-Azure section of [`coverage/observability-matrix.md`](coverage/observability-matrix.md).
-
-## Threat-intel backing
-
-These chokepoints aren't theoretical. [`trends/aws-chokepoint-convergence.md`](trends/aws-chokepoint-convergence.md)
-maps **16 real, publicly-documented AWS campaigns** — LUCR-3 / Scattered Spider, SCARLETEEL,
-AMBERSQUID, EleKtra-Leak, TeamTNT, Androxgh0st, Codefinger, and more — to the control-plane
-chokepoints each one had no choice but to touch. Different actors, different tooling
-(CloudShell, S3 Browser, Terraform, DockerHub miners); the same CloudTrail API calls.
-
-Every chokepoint entry carries a `references:` line with a **validation tier**:
-
-- **INCIDENT** — a named actor was documented calling the specific API in a real breach.
-- **AGGREGATE** — vendor telemetry across many incidents shows the behavior class is prevalent.
-- **CAPABILITY** — demonstrated feasible (PoC/research), not yet attributed in the wild.
-- **ANALOGUE** — observed in another cloud; the AWS equivalent is inferred.
-
-We label honestly — e.g. AWS KMS-deletion ransomware is CAPABILITY-only (real-world only in
-Azure so far), and the "Scattered Spider added an AWS SAML provider" claim is a common
-misattribution (their federation abuse is at the Okta/Entra tenant level, not an AWS API).
-Aggregate backing includes CrowdStrike (valid-account abuse = 35% of cloud incidents),
-Datadog (60% of AWS keys are >1 year old), Unit 42 (bulk storage downloads +305%, snapshot
-exports +45% in 2024), and Sysdig (initial-access → impact in ≤10 minutes). Full citations
-in the trends doc.
-
----
-
-## How to use this repo
-
-- **Detection engineers:** lift the Sigma rules, or the invariant analysis, and adapt the
-  Analyst-tier allowlists to your environment. **Do not ship the Analyst tier without
-  baselining against your own 30-day data** — the allowlist accounts, scanner roles, and
-  operating geos are environment-specific placeholders here.
-- **Threat hunters:** the Research-tier queries are your starting hunts. The
-  [`attack-chains/`](attack-chains/) docs show which chokepoints to prioritise per actor.
-- **Red teamers:** [`emulation/`](emulation/) has safe, lab-only commands to generate the
-  telemetry each chokepoint depends on.
-
-## A note on portability
-
-The invariant analysis is SIEM-agnostic. Detections are provided in **Sigma** so they
-convert to any backend. Field names follow CloudTrail's **native** schema (`eventName`,
-`requestParameters.*`, `userIdentity.*`); map them to your platform's parsed field names.
-Two lessons that bite everyone, documented in
-[`coverage/observability-matrix.md`](coverage/observability-matrix.md):
-
-1. The discriminating signal for most IAM/policy chokepoints lives in
-   **`requestParameters` / the policy document** — confirm your parser exposes it.
-2. **Field-to-field comparisons** (e.g. "caller account ≠ resource account") are a common
-   footgun — many query languages compare a field to the *literal string* of the other
-   field name unless you use an explicit comparison function. Validate on real data.
+- **Detection engineers:** lift the Sigma rules or the invariant analysis; adapt the Analyst-tier
+  allowlists to your environment. **Don't ship the Analyst tier without baselining against your own
+  data** — allowlists and thresholds here are placeholders.
+- **Threat hunters:** the Research-tier logic is your starting hunt; [`attack-chains/`](attack-chains/)
+  shows which chokepoints to prioritise.
+- **Red teamers:** [`emulation/`](emulation/) has safe, lab-only commands to generate each
+  chokepoint's telemetry.
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the entry [`templates/`](templates/) +
-[`schema/`](schema/). New chokepoints must pass the qualification test and cite the
-observable CloudTrail event(s).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`schema/chokepoint-schema.md`](schema/chokepoint-schema.md),
+and [`templates/`](templates/). New entries must pass the qualification gate, cite the observable
+operation(s), and set a `validation_tier`. Use `templates/quick-add.md` for a tool variant on an
+existing chokepoint.
 
-## License
+## License & acknowledgements
 
-[MIT](LICENSE). Detection logic and methodology are provided as-is for defensive use.
-
-## Acknowledgements
-
-Methodology and structure adapted from
+[MIT](LICENSE). Methodology and structure adapted from
 [iimp0ster/detection-chokepoints](https://github.com/iimp0ster/detection-chokepoints).

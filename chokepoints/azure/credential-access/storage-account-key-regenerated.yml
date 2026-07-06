@@ -1,0 +1,42 @@
+id: azure-storage-account-key-regenerated
+name: Storage account key regenerated
+cloud: azure
+tactic: credential-access
+attack_technique: [T1552]
+priority: MEDIUM
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Microsoft.Storage/storageAccounts/regenerateKey/action rotates a storage account access
+    key — a full-control credential. Regeneration mints a new attacker-usable key and can lock
+    out legitimate consumers. Related: listKeys/listAccountSas (data-exfil enablers).
+  preconditions: >
+    A principal holding Microsoft.Storage/storageAccounts/regenerateKey/action.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    regenerateKey by a human/unexpected principal (listKeys/listAccountSas are routine —
+    noisier).
+  operations: [MICROSOFT.STORAGE/STORAGEACCOUNTS/REGENERATEKEY/ACTION, MICROSOFT.STORAGE/STORAGEACCOUNTS/LISTKEYS/ACTION]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.STORAGE/STORAGEACCOUNTS/REGENERATEKEY/ACTION — every occurrence." }
+  hunt: { fp_rate: medium, logic: "regenerateKey by a human/unexpected principal (listKeys/listAccountSas are routine — noisier)." }
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      regenerateKey by a human/unexpected principal (listKeys/listAccountSas are routine —
+      noisier); exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1552/"
+  - "trends/azure-chokepoint-convergence.md"

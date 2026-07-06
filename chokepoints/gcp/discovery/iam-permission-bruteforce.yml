@@ -1,0 +1,61 @@
+id: gcp-iam-permission-bruteforce
+name: IAM permission brute-forcing (testIamPermissions / queryTestablePermissions)
+cloud: gcp
+tactic: discovery
+attack_technique: [T1087.004, T1069.003]
+priority: HIGH
+prevalence: HIGH
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    To map what a stolen principal can do, an attacker enumerates its effective permissions.
+    The unavoidable call is testIamPermissions (or getIamPolicy when permitted), typically in
+    batches of 100 up to ~9,500 permissions.
+  preconditions: >
+    Any credential that can call testIamPermissions / QueryTestablePermissions (or getIamPolicy)
+    on the target resources.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Repeated testIamPermissions from a single principal in a short window; large permissions[]
+    cardinality; service-account (not interactive) principal; burst of PERMISSION_DENIED.
+  operations:
+    - projects.testIamPermissions          # cloudresourcemanager; FQ form VALIDATE
+    - google.iam.admin.v1.TestIAMPermissions
+    - google.iam.admin.v1.QueryTestablePermissions
+  variations: [GCPHound, gcpwn, gcp_scanner, "Bruteforce-GCP-Permissions", ScoutSuite]
+
+observability:
+  status: INGEST_GAP
+  log_source: GCP Cloud Audit Log
+  log_class: DATA_ACCESS            # ADMIN_READ — OFF BY DEFAULT
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.permissions;
+    protoPayload.status.code
+  notes: >
+    Requires Data Access (ADMIN_READ) on Resource Manager + IAM.
+    methodName confidence: behavior confirmed (Stratus); exact FQ strings VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "testIamPermissions / QueryTestablePermissions — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Repeated testIamPermissions from a single principal in a short window; large
+      permissions[] cardinality; service-account (not interactive) principal; burst of
+      PERMISSION_DENIED.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Repeated testIamPermissions from a single principal in a short window; large
+      permissions[] cardinality; service-account (not interactive) principal; burst of
+      PERMISSION_DENIED; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.discovery.enumerate-permissions/
+  - https://attack.mitre.org/techniques/T1087/004/
+  - "trends/gcp-chokepoint-convergence.md"

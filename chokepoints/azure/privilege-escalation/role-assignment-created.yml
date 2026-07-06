@@ -1,0 +1,48 @@
+id: azure-role-assignment-created
+name: RBAC role assignment created
+cloud: azure
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: HIGH
+prevalence: HIGH
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Granting any RBAC role must call Microsoft.Authorization/roleAssignments/write. The
+    privilege-escalation case is assigning Owner / Contributor / User Access Administrator to
+    a principal the attacker controls (self, new service principal, external guest).
+  preconditions: >
+    A principal holding Microsoft.Authorization/roleAssignments/write on the target scope.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Assigned role is privileged (Owner/Contributor/UserAccessAdministrator) AND/OR the target
+    principal is new/external. CAVEAT: the assigned role/principal are NOT cleanly parsed in
+    the Activity Log (only the caller's authorizing role) — needs request-body inspection.
+  operations: [MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+  signal_field: caller, identity.claims.idtyp, callerIpAddress, cloud.target.Resource.id
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/WRITE — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Assigned role is privileged (Owner/Contributor/UserAccessAdministrator) AND/OR the target
+      principal is new/external.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Assigned role is privileged (Owner/Contributor/UserAccessAdministrator) AND/OR the target
+      principal is new/external; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: INCIDENT
+actors: ["Storm-0501 (Azure ransomware — roleAssignments/write for control)", "Scattered Spider/UNC3944 (cloud RBAC abuse)"]
+references:
+  - "https://attack.mitre.org/techniques/T1098/003/"
+  - "trends/azure-chokepoint-convergence.md"

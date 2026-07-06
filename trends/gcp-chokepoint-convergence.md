@@ -5,7 +5,7 @@ Cloud. Same thesis — *TTPs evolve, chokepoints don't* — applied to GCP Cloud
 Different crews converge on the same control-plane invariants: identity abuse in, IAM
 manipulation to escalate/persist, log destruction to hide, compute hijack to profit.
 
-## Validation tiers (same as the AWS doc)
+## Validation tiers
 
 - **INCIDENT** — a named actor was documented performing the technique in GCP.
 - **AGGREGATE** — vendor/provider telemetry across many incidents quantifies the behavior.

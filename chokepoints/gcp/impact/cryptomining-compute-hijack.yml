@@ -1,0 +1,59 @@
+id: gcp-cryptomining-compute-hijack
+name: Resource hijacking — compute spun up for cryptomining
+cloud: gcp
+tactic: impact
+attack_technique: [T1496, T1496.001, T1496.004]
+priority: HIGH
+prevalence: VERY_HIGH
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Monetizing a compromised project via mining requires creating compute. The
+    instance-create call is unavoidable. GCAT: ~65% of compromised cloud accounts were used
+    for cryptomining; one incident used a compromised App Engine default SA to spin up 1,600+
+    GPU VMs across regions.
+  preconditions: >
+    A credential holding compute.instances.create.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Bursts of instances.insert (many zones/regions in a short window), GPU guestAccelerators
+    or large machineType, unusual zones, or creation by a default/rarely-deploying SA. Single
+    insert is normal; the burst/shape is the signal.
+  operations: [v1.compute.instances.insert, beta.compute.instances.insert]
+  variations:
+    - Stratus gcp.impact.create-gpu-vm
+    - Stratus gcp.impact.create-instances-in-multiple-zones
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.guestAccelerators;
+    protoPayload.request.machineType; protoPayload.resourceName
+  notes: >
+    methodName confidence: confirmed
+
+detection:
+  research: { fp_rate: high, logic: "compute.instances.insert — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Bursts of instances.insert (many zones/regions in a short window), GPU guestAccelerators
+      or large machineType, unusual zones, or creation by a default/rarely-deploying SA.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Bursts of instances.insert (many zones/regions in a short window), GPU guestAccelerators
+      or large machineType, unusual zones, or creation by a default/rarely-deploying SA;
+      exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: INCIDENT
+actors: ["Cryptomining crews (TeamTNT-linked, leaked-key abusers)"]
+related: []
+references:
+  - https://securitylabs.datadoghq.com/articles/google-cloud-threat-detection/
+  - https://attack.mitre.org/techniques/T1496/
+  - "trends/gcp-chokepoint-convergence.md"

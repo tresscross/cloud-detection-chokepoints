@@ -1,0 +1,60 @@
+id: aws-ebs-snapshot-ami-shared-external
+name: EBS snapshot / AMI shared to an external account
+cloud: aws
+tactic: exfiltration
+attack_technique: [T1537]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An attacker copies data out by sharing an EBS snapshot or AMI with an account they
+    control (or making it public), then restoring it there. The unavoidable step is the
+    attribute ADD granting createVolumePermission / launchPermission to an external account
+    or to "all".
+  preconditions: >
+    A credential holding ec2:ModifySnapshotAttribute / ec2:ModifyImageAttribute.
+  attacker_controls: [user agent, source IP, tool, timing, snapshot/AMI id]
+  invariant: >
+    eventName is ModifySnapshotAttribute or ModifyImageAttribute that ADDS a permission for
+    an external account id or group="all". The share cannot happen without this attribute
+    write. Note: it must be the ADD path, not REMOVE.
+  operations: [ModifySnapshotAttribute, ModifyImageAttribute]
+  variations:
+    - RDS ModifyDBSnapshotAttribute (share DB snapshot)
+    - CopySnapshot to an external region/account; S3 cross-account replication; S3 made public
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: >
+    requestParameters.createVolumePermission.add.items[].userId /
+    requestParameters.launchPermission.add.items[].userId / ....add.items[].group ("all")
+  notes: >
+    FOOTGUN — matching userId anywhere in the raw event also catches the REMOVE path (e.g.
+    a scanner de-authorising itself). Scope to the .add path. Agentless-scanning / backup
+    SaaS routinely share snapshots to vendor accounts at high volume — allowlist them.
+    Sample (redacted): eventName=ModifySnapshotAttribute,
+    requestParameters.createVolumePermission.add.items[0].userId="210987654321".
+
+detection:
+  research: { fp_rate: high, logic: "eventName in (ModifySnapshotAttribute, ModifyImageAttribute) — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Attribute ADD granting an account id or group=all; group by actor + target account." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      group="all" (public) always; OR add-target account not in your org list and not in
+      your known-scanning/backup-vendor allowlist. Both allowlists from YOUR baseline.
+
+validation_tier: AGGREGATE
+actors: []
+evolution_timeline:
+  - "Snapshot-sharing exfil is a staple of cloud data theft; the attribute APIs are stable."
+related: [aws-sts-cross-account-new-principal]
+references:
+  - "MITRE ATT&CK T1537 — Transfer Data to Cloud Account"
+  - "Threat intel [AGGREGATE]: No attributed incident found (simulation frameworks only); Unit 42 cloud snapshot-export alerts +45% in 2024 — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

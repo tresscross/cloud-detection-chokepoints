@@ -1,0 +1,55 @@
+id: gcp-org-policy-constraint-weakened
+name: Org policy constraint weakened to enable other primitives
+cloud: gcp
+tactic: privilege-escalation
+attack_technique: [T1484, T1562]
+priority: HIGH
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    To lift a guardrail (e.g. disable the SA-key-creation constraint, or allow external
+    members), an attacker must set/modify an org policy constraint.
+  preconditions: >
+    A credential holding orgpolicy.policy.set (or the resource manager org-policy update
+    permission).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Weakening of iam.disableServiceAccountKeyCreation or
+    constraints/iam.allowedPolicyMemberDomains; correlate with subsequent key creation or
+    external-member SetIamPolicy.
+  operations: [SetOrgPolicy, google.cloud.orgpolicy.v2.OrgPolicy.UpdatePolicy]  # VALIDATE
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    methodName confidence: bare SetOrgPolicy plausible; FQ form VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "SetOrgPolicy / UpdatePolicy — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Weakening of iam.disableServiceAccountKeyCreation or
+      constraints/iam.allowedPolicyMemberDomains; correlate with subsequent key creation or
+      external-member SetIamPolicy.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Weakening of iam.disableServiceAccountKeyCreation or
+      constraints/iam.allowedPolicyMemberDomains; correlate with subsequent key creation or
+      external-member SetIamPolicy; exclude known-benign automation (allowlist from your
+      baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://github.com/RhinoSecurityLabs/GCP-IAM-Privilege-Escalation
+  - "trends/gcp-chokepoint-convergence.md"

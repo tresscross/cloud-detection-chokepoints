@@ -1,0 +1,41 @@
+id: azure-key-vault-access-policy-write
+name: Key Vault access policy / vault write
+cloud: azure
+tactic: credential-access
+attack_technique: [T1098.003]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Microsoft.KeyVault/vaults/write (or access-policy change) can grant the attacker's principal
+    Get/List on secrets/keys — a credential-access precursor that IS control-plane visible even
+    though the secret READS themselves are not.
+  preconditions: >
+    A principal holding Microsoft.KeyVault/vaults/write (or access-policy write).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    access-policy delta granting secret/key Get+List to a new/external principal.
+  operations: [MICROSOFT.KEYVAULT/VAULTS/WRITE, MICROSOFT.KEYVAULT/VAULTS/ACCESSPOLICIES/WRITE]
+
+observability:
+  status: PARTIAL
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.KEYVAULT/VAULTS/WRITE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "access-policy delta granting secret/key Get+List to a new/external principal." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      access-policy delta granting secret/key Get+List to a new/external principal; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1098/003/"
+  - "trends/azure-chokepoint-convergence.md"

@@ -1,0 +1,68 @@
+id: aws-iam-enumeration-burst
+name: IAM / account enumeration burst
+cloud: aws
+tactic: discovery
+attack_technique: [T1087.004]
+priority: MEDIUM
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    A foothold must orient itself — map identities, roles, policies, and account structure.
+    Individual list/describe calls are benign and constant; the invariant is the BURST:
+    many DISTINCT enumeration APIs from one principal in a short window, which recon tooling
+    (pacu, cloud enum scripts) cannot avoid.
+  preconditions: >
+    Any valid credential with read/list IAM permissions.
+  attacker_controls: [user agent, source IP, tool, timing, order of calls]
+  invariant: >
+    A single principal calls N or more DISTINCT IAM/account enumeration eventNames within a
+    window. The specific tool varies; the fan-out across enumeration APIs does not.
+  operations:
+    - ListUsers
+    - ListRoles
+    - ListPolicies
+    - GetAccountAuthorizationDetails
+    - ListAttachedRolePolicies
+    - ListAttachedUserPolicies
+    - GetAccountSummary
+    - ListAccessKeys
+    - ListGroupsForUser
+  variations:
+    - EC2/S3/RDS describe/list bursts (infrastructure recon)
+    - GetCallerIdentity whoami as the first orientation call
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: eventName (count distinct per principal per window)
+  notes: >
+    Security scanners and service-linked roles (CSPM, config, access-analyzer, resource
+    explorer) legitimately enumerate broadly and continuously — they MUST be allowlisted or
+    the rule is pure noise. Baseline the distinct-count ceiling for normal principals first.
+    Sample (redacted): one principal calling ListUsers, ListRoles,
+    GetAccountAuthorizationDetails, ListPolicies, ListAccessKeys, ListAttachedRolePolicies
+    within 60s.
+
+detection:
+  research: { fp_rate: high, logic: "eventName in the enumeration set — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Count distinct enum eventNames per principal per window; sort desc." }
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Distinct enum APIs per principal per window >= threshold (set from YOUR baseline —
+      often ~6, well above the normal ceiling), excluding scanner / service-linked roles.
+
+validation_tier: INCIDENT
+actors: [TeamTNT]
+evolution_timeline:
+  - "Every cloud-recon toolkit fans out across the same enumeration APIs; the set is stable."
+related: [aws-secrets-manager-mass-read]
+references:
+  - "MITRE ATT&CK T1087.004 — Account Discovery: Cloud Account"
+  - "MITRE ATT&CK T1069.003 — Permission Groups Discovery: Cloud Groups"
+  - "Threat intel [INCIDENT]: TeamTNT ran ~70 IAM/EC2/S3 enum calls; exposed-.env extortion used ListUsers (Unit 42, 2021/2024) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

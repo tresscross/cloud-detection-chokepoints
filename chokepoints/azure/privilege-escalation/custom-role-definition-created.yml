@@ -1,0 +1,40 @@
+id: azure-custom-role-definition-created
+name: Custom role definition created or modified
+cloud: azure
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Creating/altering a custom role (Microsoft.Authorization/roleDefinitions/write) can smuggle
+    privileged Actions (e.g. Microsoft.Authorization/*/write) into a benign-looking role.
+  preconditions: >
+    A principal holding Microsoft.Authorization/roleDefinitions/write.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Custom role whose permissions include Authorization/* or */write wildcards.
+  operations: [MICROSOFT.AUTHORIZATION/ROLEDEFINITIONS/WRITE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.AUTHORIZATION/ROLEDEFINITIONS/WRITE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Custom role whose permissions include Authorization/* or */write wildcards." }
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Custom role whose permissions include Authorization/* or */write wildcards; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1098/003/"
+  - "trends/azure-chokepoint-convergence.md"

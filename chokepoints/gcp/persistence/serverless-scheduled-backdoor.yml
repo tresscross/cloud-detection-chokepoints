@@ -1,0 +1,55 @@
+id: gcp-serverless-scheduled-backdoor
+name: Serverless / scheduled backdoor (public function or scheduled job)
+cloud: gcp
+tactic: persistence
+attack_technique: [T1053, T1546, T1648]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    A re-entry backdoor is created by deploying a function/service reachable publicly, or a
+    scheduled job that re-triggers attacker code with an SA.
+  preconditions: >
+    A credential holding cloudfunctions.functions.setIamPolicy / run.services.setIamPolicy,
+    or cloudscheduler.jobs.create.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Function/Run IAM policy granting allUsers/allAuthenticatedUsers the invoker role, or a
+    scheduler job with an attached SA + external HTTP target.
+  operations:
+    - google.cloud.functions.v1.CloudFunctionsService.SetIamPolicy   # allUsers invoker; VALIDATE
+    - google.cloud.run.v1.Services.SetIamPolicy                       # VALIDATE
+    - google.cloud.scheduler.v1.CloudScheduler.CreateJob             # VALIDATE
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.policy.bindings
+  notes: >
+    methodName confidence: VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "Function/Run SetIamPolicy / CreateJob — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Function/Run IAM policy granting allUsers/allAuthenticatedUsers the invoker role, or a
+      scheduler job with an attached SA + external HTTP target.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Function/Run IAM policy granting allUsers/allAuthenticatedUsers the invoker role, or a
+      scheduler job with an attached SA + external HTTP target; exclude known-benign
+      automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://attack.mitre.org/techniques/T1053/
+  - "trends/gcp-chokepoint-convergence.md"

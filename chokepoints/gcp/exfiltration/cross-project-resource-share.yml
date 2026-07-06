@@ -1,0 +1,60 @@
+id: gcp-cross-project-resource-share
+name: Cross-project data transfer via resource IAM sharing
+cloud: gcp
+tactic: exfiltration
+attack_technique: [T1537]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Exfil that never leaves Google is done by sharing a disk/image/snapshot (or exporting a
+    DB) to an attacker-controlled project — a setIamPolicy on the resource, or an export call.
+  preconditions: >
+    A credential holding compute.disks.setIamPolicy / images.setIamPolicy /
+    snapshots.setIamPolicy (or cloudsql.instances.export).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Binding grants a principal in an EXTERNAL project/domain; disk/image/snapshot shared out;
+    cloudsql export destination bucket in a different project.
+  operations:
+    - v1.compute.disks.setIamPolicy
+    - v1.compute.images.setIamPolicy
+    - v1.compute.snapshots.setIamPolicy
+    - cloudsql.instances.export
+  variations:
+    - Stratus gcp.exfiltration.share-compute-disk / share-compute-image / share-compute-snapshot
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.policy.bindings;
+    protoPayload.resourceName
+  notes: >
+    methodName confidence: setIamPolicy variants confirmed (Stratus); cloudsql.instances.export per Datadog
+
+detection:
+  research: { fp_rate: high, logic: "disks/images/snapshots setIamPolicy / cloudsql.instances.export — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Binding grants a principal in an EXTERNAL project/domain; disk/image/snapshot shared
+      out; cloudsql export destination bucket in a different project.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Binding grants a principal in an EXTERNAL project/domain; disk/image/snapshot shared
+      out; cloudsql export destination bucket in a different project; exclude known-benign
+      automation (allowlist from your baseline).
+
+validation_tier: INCIDENT
+actors: ["UNC4899 (Cloud SQL tampering / crypto heist)"]
+related: []
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.exfiltration.share-compute-disk/
+  - https://attack.mitre.org/techniques/T1537/
+  - "trends/gcp-chokepoint-convergence.md"

@@ -1,0 +1,55 @@
+id: aws-iam-inline-policy-self-escalation
+name: Inline-policy self-escalation
+cloud: aws
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: CRITICAL
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An identity with iam:PutRolePolicy / iam:PutUserPolicy writes an inline policy granting
+    itself (or a role it holds) a wildcard action — escalating to admin without touching
+    managed policies at all.
+  preconditions: >
+    A credential holding iam:PutRolePolicy or iam:PutUserPolicy on a principal in the escalation path.
+  attacker_controls: [user agent, source IP, tool, timing, policy name]
+  invariant: >
+    eventName=PutRolePolicy or PutUserPolicy and the inline policy document grants a wildcard
+    action. Especially strong when the actor targets the SAME role it is operating under.
+  operations: [PutRolePolicy, PutUserPolicy]
+  variations:
+    - CreatePolicyVersion (managed-policy wildcard)
+    - AttachRolePolicy/AttachUserPolicy with a privileged managed policy
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: requestParameters.policyDocument; requestParameters.roleName / .userName
+  notes: >
+    Low-volume IAM write. The wildcard action lives in the inline policyDocument — confirm
+    your parser exposes requestParameters.
+    Sample (redacted): eventName=PutRolePolicy, requestParameters.roleName=<own role>,
+    policyDocument Action="*".
+
+detection:
+  research: { fp_rate: high, logic: "eventName in (PutRolePolicy, PutUserPolicy) — every occurrence." }
+  hunt: { fp_rate: medium, logic: "policyDocument grants Action:*; group by underlying role." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Wildcard-action inline policy, especially where the actor targets its own role;
+      exclude known IaC deploy roles (allowlist from YOUR baseline).
+
+validation_tier: AGGREGATE
+actors: []
+evolution_timeline:
+  - "Inline-policy self-grant is a stable AWS privesc primitive."
+related: [aws-iam-create-policy-version, aws-iam-privileged-policy-attach]
+references:
+  - "MITRE ATT&CK T1098.003 — Additional Cloud Roles"
+  - "Threat intel [AGGREGATE]: IAM self-escalation class; covered by Unit 42 IAM-anomaly telemetry (2025) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

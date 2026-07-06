@@ -1,0 +1,67 @@
+id: gcp-valid-account-control-plane
+name: Valid cloud account / stolen credential used against the control plane
+cloud: gcp
+tactic: initial-access
+attack_technique: [T1078.004]
+priority: CRITICAL
+prevalence: VERY_HIGH
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    Every cloud intrusion must authenticate with some valid principal — a user OAuth2
+    session, a service-account key, or an impersonated token. The auth event is unavoidable
+    even when the credential is legitimate.
+  preconditions: >
+    Any valid principal — a user OAuth2 session, a service-account key, or an impersonated
+    token.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    New principal+callerIp pairing; impossible travel within a session; a previously-dormant
+    service account suddenly active; callerIp outside known corporate/Google egress;
+    callerSuppliedUserAgent indicating an offensive tool.
+  operations: ["<any first-seen methodName for the principal>"]
+  variations:
+    - Stratus gcp.initial-access.use-compute-sa-outside-gcp (GCE default SA token exfiltrated from metadata service and used off-GCP; shows as Admin Activity from a non-Google IP).
+    - Stealer malware harvesting gcloud/Docker/K8s credential files (TeamTNT).
+    - AiTM phishing kits stealing OAuth session tokens (Scattered Spider 2025).
+
+observability:
+  status: PARTIAL
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY         # for API calls; console/OAuth sign-in is elsewhere (see caveat)
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.requestMetadata.callerIp;
+    protoPayload.requestMetadata.callerSuppliedUserAgent
+  notes: >
+    OBSERVABILITY GAP — interactive console / OAuth sign-in events live in Google Workspace /
+    Cloud Identity audit logs, NOT in project Cloud Audit Logs. Confirm that source is also
+    forwarded to NG-SIEM; without it, only the first API call is visible, not the sign-in.
+
+detection:
+  research: { fp_rate: high, logic: "First control-plane call by the principal — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      New principal+callerIp pairing; impossible travel within a session; a
+      previously-dormant service account suddenly active; callerIp outside known
+      corporate/Google egress; callerSuppliedUserAgent indicating an offensive tool.
+  analyst:
+    fp_rate: low
+    severity: CRITICAL
+    logic: >
+      New principal+callerIp pairing; impossible travel within a session; a
+      previously-dormant service account suddenly active; callerIp outside known
+      corporate/Google egress; callerSuppliedUserAgent indicating an offensive tool; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: INCIDENT
+actors:
+  - "Scattered Spider / UNC3944 (vishing + AiTM MFA bypass; GCP a named target/exfil dest)"
+  - "TeamTNT-linked stealers (harvest GCP creds from config files)"
+related: []
+references:
+  - https://cloud.google.com/blog/topics/threat-intelligence/unc3944-targets-saas-applications
+  - https://attack.mitre.org/techniques/T1078/004/
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.initial-access.use-compute-sa-outside-gcp/
+  - "trends/gcp-chokepoint-convergence.md"

@@ -1,0 +1,54 @@
+id: gcp-ssh-key-added-to-metadata
+name: SSH key added to project/instance metadata (lateral persistence)
+cloud: gcp
+tactic: persistence
+attack_technique: [T1098.004]
+priority: MEDIUM
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Persisting access to GCE hosts via OS Login/metadata means writing an SSH key to instance
+    or project-wide metadata.
+  preconditions: >
+    A credential holding compute.instances.setMetadata /
+    compute.projects.setCommonInstanceMetadata.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    ssh-keys metadata item added (esp. project-wide setCommonInstanceMetadata) by an unusual
+    principal; key comment/user not in the known set.
+  operations: [v1.compute.instances.setMetadata, v1.compute.projects.setCommonInstanceMetadata]  # VALIDATE
+  variations: [Stratus gcp.lateral-movement.add-sshkey-instance-metadata]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.metadata
+  notes: >
+    methodName confidence: setCommonInstanceMetadata per Datadog; instance setMetadata VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "setMetadata / setCommonInstanceMetadata — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      ssh-keys metadata item added (esp. project-wide setCommonInstanceMetadata) by an unusual
+      principal; key comment/user not in the known set.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      ssh-keys metadata item added (esp. project-wide setCommonInstanceMetadata) by an unusual
+      principal; key comment/user not in the known set; exclude known-benign automation
+      (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://securitylabs.datadoghq.com/articles/google-cloud-threat-detection/
+  - https://attack.mitre.org/techniques/T1098/004/
+  - "trends/gcp-chokepoint-convergence.md"

@@ -1,0 +1,65 @@
+id: gcp-setiampolicy-privileged-grant
+name: setIamPolicy self-grant / external grant at project / folder / org
+cloud: gcp
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: CRITICAL
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Granting a role to a principal must call setIamPolicy on the target resource. The binding
+    delta records exactly who was granted which role.
+  preconditions: >
+    A credential holding resourcemanager.projects/folders/organizations.setIamPolicy on the
+    target resource.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    bindingDeltas action=ADD of the CALLER themselves (self-grant), an external domain /
+    gmail.com principal, or allUsers/allAuthenticatedUsers, to a privileged role (roles/owner,
+    roles/editor, roles/iam.serviceAccountTokenCreator, roles/iam.securityAdmin,
+    roles/resourcemanager.*Admin).
+  operations: [SetIamPolicy]
+  variations:
+    - "gcloud <res> add-iam-policy-binding"
+    - Stratus gcp.persistence.invite-external-user (grants roles/editor to external user)
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail;
+    protoPayload.serviceData.policyDelta.bindingDeltas; protoPayload.resourceName
+  notes: >
+    CAVEAT — the binding detail historically lived in protoPayload.serviceData (deprecated)
+    and is frequently DROPPED from exported logs. Prefer protoPayload.metadata where present;
+    treat serviceData-only rules as unreliable on exported logs (validate against a live
+    sample).
+    methodName confidence: confirmed
+
+detection:
+  research: { fp_rate: high, logic: "SetIamPolicy — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      bindingDeltas action=ADD of the CALLER themselves (self-grant), an external domain /
+      gmail.com principal, or allUsers/allAuthenticatedUsers, to a privileged role.
+  analyst:
+    fp_rate: low
+    severity: CRITICAL
+    logic: >
+      bindingDeltas action=ADD of the CALLER themselves (self-grant), an external domain /
+      gmail.com principal, or allUsers/allAuthenticatedUsers, to a privileged role
+      (roles/owner, roles/editor, roles/iam.serviceAccountTokenCreator, roles/iam.securityAdmin,
+      roles/resourcemanager.*Admin); exclude known-benign automation (allowlist from your
+      baseline).
+
+validation_tier: INCIDENT
+actors: ["UNC4899 (new admin binding in CI/CD escalation)", "Scattered Spider/LUCR-3 (role/identity manipulation)"]
+related: []
+references:
+  - https://securitylabs.datadoghq.com/cloud-security-atlas/attacks/backdooring-service-account/
+  - https://attack.mitre.org/techniques/T1098/003/
+  - "trends/gcp-chokepoint-convergence.md"

@@ -21,7 +21,7 @@ qualifies only if:
 ## Adding an entry
 
 1. Copy [`templates/chokepoint-template.yml`](templates/chokepoint-template.yml) to
-   `chokepoints/<tactic>/<slug>.yml`.
+   `chokepoints/<cloud>/<tactic>/<slug>.yml`.
 2. Fill every required field (see [`schema/chokepoint-schema.md`](schema/chokepoint-schema.md)).
 3. Provide detection logic at all **three tiers** (Research / Hunt / Analyst).
 4. Add a portable Sigma rule under `sigma-rules/` for the Analyst tier where practical.

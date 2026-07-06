@@ -11,7 +11,7 @@ Lambda scanners, DockerHub miners) — mapped to the control-plane chokepoints t
 no choice but to touch. Every campaign and every API here is drawn from a primary source
 cited at the bottom; load-bearing claims were re-verified against the source page.
 
-## How to read this
+## Validation tiers
 
 Each chokepoint carries a **validation tier** — how strong the public evidence is:
 

@@ -1,0 +1,44 @@
+id: azure-storage-bulk-blob-read
+name: Storage bulk blob read (data exfiltration)
+cloud: azure
+tactic: exfiltration
+attack_technique: [T1530]
+priority: HIGH
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Reading blobs at scale (GetBlob) is the bulk-exfil chokepoint — but it is a DATA-PLANE
+    operation, logged only if the storage account's diagnostic settings route StorageRead logs
+    to Log Analytics. OFF by default.
+  preconditions: >
+    A principal holding read access to storage blobs (data-plane GetBlob).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Reading blobs at scale (GetBlob) — the bulk-exfil chokepoint.
+  operations: [GetBlob]
+
+observability:
+  status: INGEST_GAP
+  log_source: Azure Activity Log
+  log_class: DATA_PLANE
+  notes: >
+    BLOCKED — Azure analogue of the AWS S3-GetObject / GCP Data-Access gap. Enable storage
+    diagnostic logging (StorageRead) to unblock.
+
+detection:
+  research: { fp_rate: high, logic: "GetBlob — every occurrence." }
+  hunt: { fp_rate: medium, logic: "GetBlob at scale — requires storage StorageRead diagnostic logging routed to Log Analytics (off by default)." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      GetBlob at scale — requires storage StorageRead diagnostic logging routed to Log Analytics
+      (off by default); exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1530/"
+  - "trends/azure-chokepoint-convergence.md"

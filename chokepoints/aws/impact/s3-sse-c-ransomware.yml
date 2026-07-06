@@ -1,0 +1,61 @@
+id: aws-s3-sse-c-ransomware
+name: S3 ransomware via SSE-C encryption-in-place
+cloud: aws
+tactic: impact
+attack_technique: [T1486]
+priority: HIGH
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    An attacker with s3:GetObject + s3:PutObject re-writes a victim's objects encrypted with
+    Server-Side Encryption using Customer-provided keys (SSE-C), supplying an attacker-held
+    AES-256 key. AWS stores only a non-reversible HMAC of the key, so the data is
+    unrecoverable without paying. Observed in the wild as the "Codefinger" campaign (2025).
+  preconditions: >
+    Compromised credentials with read+write on the target bucket/objects.
+  attacker_controls: [user agent, source IP, tool, timing, the customer-provided key]
+  invariant: >
+    The object-write path carries the SSE-C header
+    (x-amz-server-side-encryption-customer-algorithm). An attacker cannot encrypt-in-place
+    without issuing an authenticated PutObject/CopyObject with that header — and typically a
+    bucket lifecycle-configuration call to set a short deletion timer for extortion pressure.
+  operations: [PutObject, CopyObject, PutBucketLifecycleConfiguration]
+  variations:
+    - Classic object deletion / overwrite (see impact/backup-destruction)
+    - Deleting the KMS key protecting SSE-KMS objects (see defense-evasion/kms-key-sabotage)
+
+observability:
+  status: CONFIRM
+  log_source: AWS CloudTrail
+  log_class: Data
+  signal_field: request SSE-C header (x-amz-server-side-encryption-customer-algorithm); additionalEventData; PutBucketLifecycleConfiguration in requestParameters
+  notes: >
+    CAVEAT — PutObject/CopyObject are S3 DATA events, off by default; the SSE-C key is logged
+    only as a non-reversible HMAC. Without S3 data-event logging enabled you may only see the
+    management-plane PutBucketLifecycleConfiguration. Enable data events on sensitive buckets.
+    A sudden surge of SSE-C writes (a header rare in normal traffic) is the strongest signal.
+    Sample (redacted): PutObject with x-amz-server-side-encryption-customer-algorithm=AES256
+    (attacker key; CloudTrail records HMAC only) + PutBucketLifecycleConfiguration expiration=7d.
+
+detection:
+  research: { fp_rate: high, logic: "S3 writes carrying x-amz-server-side-encryption-customer-algorithm — every occurrence (requires data-event logging)." }
+  hunt: { fp_rate: medium, logic: "Surge of SSE-C PutObject/CopyObject by one principal across many keys/buckets; group by principal + bucket." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      SSE-C write surge by a principal with no SSE-C baseline, OR a
+      PutBucketLifecycleConfiguration adding a short (<=7 day) expiration shortly after. Exclude
+      apps that legitimately use SSE-C (allowlist from baseline).
+
+validation_tier: INCIDENT
+actors: [Codefinger]
+evolution_timeline:
+  - "2025 — Codefinger campaign (Halcyon) weaponised SSE-C for S3 ransomware; a novel abuse of a legitimate AWS encryption feature."
+related: [aws-kms-key-sabotage]
+references:
+  - "MITRE ATT&CK T1486 — Data Encrypted for Impact"
+  - "Halcyon, 'Abusing AWS Native Services: Ransomware Encrypting S3 Buckets with SSE-C', 2025-01-13 — https://www.halcyon.ai/blog/abusing-aws-native-services-ransomware-encrypting-s3-buckets-with-sse-c"
+  - "trends/aws-chokepoint-convergence.md"

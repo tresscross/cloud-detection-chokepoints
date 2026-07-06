@@ -1,0 +1,64 @@
+id: aws-ses-sending-identity-abuse
+name: SES sending / identity abuse
+cloud: aws
+tactic: impact
+attack_technique: [T1496]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Email-fraud crews weaponise a victim's SES to send phishing/spam on the account's
+    sending reputation. Doing so requires control-plane config writes: enabling account
+    sending, verifying new sending identities/domains, or raising quota.
+  preconditions: >
+    A credential holding the relevant ses: management permissions.
+  attacker_controls: [user agent, source IP, tool, timing, identity/domain name]
+  invariant: >
+    eventName is one of the SES sending/identity config verbs. The sending leg (SendEmail
+    volume) is data-plane and largely absent from CloudTrail management events, so anchor on
+    the identity/account-config verbs — the observable chokepoint. Base rate is near-zero.
+  operations:
+    - UpdateAccountSendingEnabled
+    - PutAccountSendingAttributes
+    - UpdateConfigurationSetSendingEnabled
+    - VerifyEmailIdentity
+    - VerifyDomainIdentity
+    - VerifyDomainDkim
+    - SetIdentityDkimEnabled
+    - CreateEmailIdentity
+    - PutAccountDetails
+  variations:
+    - Requesting production access / sending-limit increase via Support API
+    - CreateConfigurationSet + event destinations for tracking a spam campaign
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: eventName; requestParameters.identity / .emailIdentity / .domain
+  notes: >
+    SES read/list traffic can be heavy; scope to readOnly=false / the specific verbs. In
+    many environments state-changing SES verbs have a zero baseline — any occurrence alerts.
+    Sample (redacted): eventName=VerifyDomainIdentity, requestParameters.domain=<attacker-domain>.
+
+detection:
+  research: { fp_rate: high, logic: "eventSource=ses, readOnly=false — every state-changing SES action." }
+  hunt: { fp_rate: medium, logic: "The abuse verbs, grouped by actor." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Any of the sending/identity config verbs (success). Where legitimate SES admin exists,
+      allowlist the managing role from baseline; otherwise alert on any occurrence.
+
+validation_tier: INCIDENT
+actors: []
+evolution_timeline:
+  - "SES-fraud crews (e.g. hijacking exposed keys to send phishing) are an established niche; the config APIs are stable."
+related: [aws-secrets-manager-mass-read]
+references:
+  - "MITRE ATT&CK T1496 — Resource Hijacking"
+  - "Threat intel [INCIDENT]: SES-pionage, exposed-.env extortion, Wiz email takeover (PutAccountDetails/CreateEmailIdentity), GuardDuty SES backdoor (Permiso/Unit 42/Wiz/AWS, 2023-2025) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

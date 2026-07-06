@@ -1,0 +1,43 @@
+id: azure-elevate-access-all-subscriptions
+name: Elevate access to all subscriptions (tenant-wide)
+cloud: azure
+tactic: privilege-escalation
+attack_technique: [T1548.005]
+priority: CRITICAL
+prevalence: EMERGING
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    A Global Administrator calling Microsoft.Authorization/elevateAccess/action grants
+    themselves User Access Administrator across EVERY subscription in the tenant — instant
+    tenant-wide control. Single unavoidable operation; near-zero legitimate rate.
+  preconditions: >
+    A principal holding Global Administrator, able to call
+    Microsoft.Authorization/elevateAccess/action.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Any occurrence is review-worthy (zero baseline).
+  operations: [MICROSOFT.AUTHORIZATION/ELEVATEACCESS/ACTION]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+  signal_field: caller, callerIpAddress
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.AUTHORIZATION/ELEVATEACCESS/ACTION — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Any occurrence is review-worthy (zero baseline)." }
+  analyst:
+    fp_rate: low
+    severity: CRITICAL
+    logic: >
+      Any occurrence is review-worthy (zero baseline); exclude known-benign automation
+      (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1548/005/"
+  - "trends/azure-chokepoint-convergence.md"

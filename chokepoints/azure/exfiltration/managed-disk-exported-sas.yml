@@ -1,0 +1,42 @@
+id: azure-managed-disk-exported-sas
+name: Managed disk exported via SAS
+cloud: azure
+tactic: exfiltration
+attack_technique: [T1537]
+priority: HIGH
+prevalence: EMERGING
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Microsoft.Compute/disks/beginGetAccess/action mints a SAS download URL for a managed disk —
+    the "copy the disk out" exfil path, no VM interaction. Backup vendors use
+    restorePoints/retrieveSasUris instead (allowlistable), so beginGetAccess by a non-backup
+    principal is the signal.
+  preconditions: >
+    A principal holding Microsoft.Compute/disks/beginGetAccess/action.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    beginGetAccess by a principal outside the known backup/DR set.
+  operations: [MICROSOFT.COMPUTE/DISKS/BEGINGETACCESS/ACTION, MICROSOFT.COMPUTE/SNAPSHOTS/BEGINGETACCESS/ACTION]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.COMPUTE/DISKS/BEGINGETACCESS/ACTION — every occurrence." }
+  hunt: { fp_rate: medium, logic: "beginGetAccess by a principal outside the known backup/DR set." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      beginGetAccess by a principal outside the known backup/DR set; exclude known-benign
+      automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1537/"
+  - "trends/azure-chokepoint-convergence.md"

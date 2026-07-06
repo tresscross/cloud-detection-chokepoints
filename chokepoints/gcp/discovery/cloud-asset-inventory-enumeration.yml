@@ -1,0 +1,54 @@
+id: gcp-cloud-asset-inventory-enumeration
+name: Org-wide asset enumeration via Cloud Asset Inventory
+cloud: gcp
+tactic: discovery
+attack_technique: [T1580]
+priority: MEDIUM
+prevalence: MEDIUM
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    The single fastest way to enumerate an entire org is the Cloud Asset API — one
+    SearchAllResources / SearchAllIamPolicies call returns everything.
+  preconditions: >
+    A credential holding cloudasset.assets.searchAllResources / searchAllIamPolicies at the
+    org/folder scope.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Org- or folder-scope asset search by a non-admin/workload principal or from an unusual
+    callerIp. Rare for workload SAs.
+  operations: [SearchAllResources, SearchAllIamPolicies]  # cloudasset; FQ VALIDATE
+  variations: ["gcloud asset search-all-resources", ScoutSuite (Asset API mode)]
+
+observability:
+  status: INGEST_GAP
+  log_source: GCP Cloud Audit Log
+  log_class: DATA_ACCESS            # ADMIN_READ — OFF BY DEFAULT
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    Requires Data Access on cloudasset.googleapis.com.
+    methodName confidence: class confirmed; FQ strings VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "SearchAllResources / SearchAllIamPolicies — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Org- or folder-scope asset search by a non-admin/workload principal or from an unusual
+      callerIp. Rare for workload SAs.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Org- or folder-scope asset search by a non-admin/workload principal or from an unusual
+      callerIp; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://cloud.google.com/asset-inventory/docs/audit-logging
+  - https://attack.mitre.org/techniques/T1580/
+  - "trends/gcp-chokepoint-convergence.md"

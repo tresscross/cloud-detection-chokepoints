@@ -1,0 +1,60 @@
+id: gcp-gcs-data-destruction-ransomware
+name: Data destruction / ransomware (mass delete or client-side re-encrypt)
+cloud: gcp
+tactic: impact
+attack_technique: [T1485, T1486, T1490]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Destructive impact requires either deleting objects (incl. noncurrent versions) or
+    rewriting them under an attacker CSEK key.
+  preconditions: >
+    A credential holding storage.objects.delete / storage.objects.create (rewrite) on the
+    target bucket.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Bursts of objects.delete across a bucket (incl. all versions), or objects.rewrite with a
+    customer-supplied encryption key (CSEK) — the GCS ransomware pattern. Correlate with
+    log-bucket deletion (gcp-log-bucket-deleted-or-retention-reduced).
+  operations: [storage.objects.delete, storage.objects.rewrite]
+  variations:
+    - Stratus gcp.impact.gcs-ransomware-individual-deletion
+    - Stratus gcp.impact.gcs-ransomware-client-side-encryption
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY         # object delete/rewrite metadata; note contrast with DATA_READ get
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    Object write/delete land in Data Access DATA_WRITE (off by default) for some configs; the
+    Stratus ransomware modules check delete+create perms. VALIDATE which class your ingest
+    captures for object mutations.
+    methodName confidence: confirmed (Stratus)
+
+detection:
+  research: { fp_rate: high, logic: "storage.objects.delete / storage.objects.rewrite — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      Bursts of objects.delete across a bucket (incl. all versions), or objects.rewrite with
+      a customer-supplied encryption key (CSEK) — the GCS ransomware pattern.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      Bursts of objects.delete across a bucket (incl. all versions), or objects.rewrite with
+      a customer-supplied encryption key (CSEK) — the GCS ransomware pattern; exclude
+      known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: [gcp-log-bucket-deleted-or-retention-reduced]
+references:
+  - https://stratus-red-team.cloud/attack-techniques/GCP/gcp.impact.gcs-ransomware-client-side-encryption/
+  - https://attack.mitre.org/techniques/T1485/
+  - "trends/gcp-chokepoint-convergence.md"

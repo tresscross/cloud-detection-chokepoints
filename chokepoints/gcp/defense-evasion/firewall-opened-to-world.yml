@@ -1,0 +1,52 @@
+id: gcp-firewall-opened-to-world
+name: Firewall opened to the world
+cloud: gcp
+tactic: defense-evasion
+attack_technique: [T1562.007]
+priority: MEDIUM
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Exposing a service to the internet requires inserting/patching a firewall rule with a
+    0.0.0.0/0 source range.
+  preconditions: >
+    A credential holding compute.firewalls.create / compute.firewalls.update.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    sourceRanges contains 0.0.0.0/0 AND allowed ports include sensitive services
+    (22/3389/all); rule created by an unusual principal.
+  operations: [v1.compute.firewalls.insert, v1.compute.firewalls.patch]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.request.sourceRanges;
+    protoPayload.request.allowed
+  notes: >
+    methodName confidence: firewalls.insert confirmed by convention; patch VALIDATE
+
+detection:
+  research: { fp_rate: high, logic: "firewalls.insert / firewalls.patch — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      sourceRanges contains 0.0.0.0/0 AND allowed ports include sensitive services
+      (22/3389/all); rule created by an unusual principal.
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      sourceRanges contains 0.0.0.0/0 AND allowed ports include sensitive services
+      (22/3389/all); rule created by an unusual principal; exclude known-benign automation
+      (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://www.sysdig.com/blog/suspicious-activity-gcp-audit-logs
+  - "trends/gcp-chokepoint-convergence.md"

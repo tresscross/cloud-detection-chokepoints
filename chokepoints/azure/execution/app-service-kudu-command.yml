@@ -1,0 +1,43 @@
+id: azure-app-service-kudu-command
+name: App Service (Kudu) command / function key access
+cloud: azure
+tactic: execution
+attack_technique: [T1651]
+priority: MEDIUM
+prevalence: MEDIUM
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Microsoft.Web/sites/extensions/command/action (Kudu console command) or
+    Microsoft.Web/sites/host/listKeys/action (function keys) gives code-exec / invoke on an App
+    Service or Function.
+  preconditions: >
+    A principal holding Microsoft.Web/sites/extensions/command/action (or host/listKeys/action).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Kudu command / function-key listing by an unexpected principal (this traffic can be routine
+    in CI — allowlist deploy principals).
+  operations: [MICROSOFT.WEB/SITES/EXTENSIONS/COMMAND/ACTION, MICROSOFT.WEB/SITES/HOST/LISTKEYS/ACTION]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.WEB/SITES/EXTENSIONS/COMMAND/ACTION — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Kudu command / function-key listing by an unexpected principal (this traffic can be routine in CI — allowlist deploy principals)." }
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Kudu command / function-key listing by an unexpected principal (this traffic can be
+      routine in CI — allowlist deploy principals); exclude known-benign automation (allowlist
+      from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1651/"
+  - "trends/azure-chokepoint-convergence.md"

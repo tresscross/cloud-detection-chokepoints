@@ -1,0 +1,56 @@
+id: aws-iam-create-policy-version
+name: IAM policy-version self-escalation
+cloud: aws
+tactic: privilege-escalation
+attack_technique: [T1098.003]
+priority: CRITICAL
+prevalence: HIGH
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    An identity with iam:CreatePolicyVersion on a managed policy it (or a role it holds) is
+    bound to creates a new policy version granting Action:* / Resource:* and sets it as
+    default — escalating to admin without CreateUser / AttachPolicy.
+  preconditions: >
+    A credential holding iam:CreatePolicyVersion on a customer-managed policy in the escalation path.
+  attacker_controls: [user agent, source IP, CLI vs SDK vs console, timing, policy name]
+  invariant: >
+    eventName=CreatePolicyVersion and the new version's document grants a wildcard action
+    while setAsDefault=true. No tool can reach the outcome without emitting this call with
+    those request parameters.
+  operations: [CreatePolicyVersion]
+  variations:
+    - PutRolePolicy / PutUserPolicy (inline wildcard)
+    - AttachRolePolicy with AdministratorAccess
+
+observability:
+  status: OBSERVABLE
+  log_source: AWS CloudTrail
+  log_class: Management
+  signal_field: requestParameters.policyDocument (+ requestParameters.setAsDefault)
+  notes: >
+    IAM writes are low-volume; any occurrence is review-worthy. The wildcard action and
+    setAsDefault live in requestParameters — confirm your parser exposes them.
+    Sample (redacted): eventName=CreatePolicyVersion, requestParameters.setAsDefault=true,
+    policyDocument Action="*".
+
+detection:
+  research: { fp_rate: high, logic: "eventName=CreatePolicyVersion — every occurrence." }
+  hunt: { fp_rate: medium, logic: "setAsDefault=true; group by underlying role (sessionIssuer.userName)." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      As hunt, plus the policy document grants a wildcard action ("Action":"*"); exclude
+      known IaC deploy roles (allowlist from YOUR baseline).
+
+validation_tier: AGGREGATE
+actors: []
+evolution_timeline:
+  - "Canonical AWS self-escalation primitive; API + request parameters unchanged since managed-policy versioning launched."
+related: [aws-iam-inline-policy-self-escalation, aws-iam-privileged-policy-attach]
+references:
+  - "MITRE ATT&CK T1098.003 — Additional Cloud Roles"
+  - "Threat intel [AGGREGATE]: IAM privilege-escalation/anomaly prevalence; Unit 42 impossible-travel alerts +116% in 2024 (no attributed incident names the verb) — see trends/aws-chokepoint-convergence.md"
+  - "trends/aws-chokepoint-convergence.md"

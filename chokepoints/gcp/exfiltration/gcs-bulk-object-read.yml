@@ -1,0 +1,54 @@
+id: gcp-gcs-bulk-object-read
+name: Bulk object read / data exfiltration from Cloud Storage
+cloud: gcp
+tactic: exfiltration
+attack_technique: [T1530]
+priority: HIGH
+prevalence: HIGH
+difficulty: HIGH
+
+chokepoint:
+  technique: >
+    Reading objects out of a bucket must call the object-get API. High-volume get is the
+    exfil choke.
+  preconditions: >
+    A credential holding storage.objects.get / storage.objects.list on the target bucket.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    High-rate objects.get across many objects by one principal; new principal for the bucket;
+    egress-shaped access pattern.
+  operations: [storage.objects.get, storage.objects.list]
+
+observability:
+  status: INGEST_GAP
+  log_source: GCP Cloud Audit Log
+  log_class: DATA_ACCESS            # DATA_READ — OFF BY DEFAULT
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail; protoPayload.resourceName
+  notes: >
+    INGEST GAP (direct GCP analog of AWS S3 GetObject-not-ingested). GCS DATA_READ is off by
+    default. NOTE the one exception across GCP: BigQuery data reads ARE on by default —
+    BigQuery exfil (jobservice/tabledata reads) is observable.
+    methodName confidence: confirmed
+
+detection:
+  research: { fp_rate: high, logic: "storage.objects.get / storage.objects.list — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      High-rate objects.get across many objects by one principal; new principal for the
+      bucket; egress-shaped access pattern.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      High-rate objects.get across many objects by one principal; new principal for the
+      bucket; egress-shaped access pattern; exclude known-benign automation (allowlist from
+      your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://attack.mitre.org/techniques/T1530/
+  - "trends/gcp-chokepoint-convergence.md"

@@ -1,0 +1,40 @@
+id: azure-defender-for-cloud-disabled
+name: Microsoft Defender for Cloud / auto-provisioning disabled
+cloud: azure
+tactic: defense-evasion
+attack_technique: [T1562.001]
+priority: MEDIUM
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Microsoft.Security/pricings/write (downgrade to Free) or auto-provisioning/policy disable
+    turns off Defender coverage — reducing detection before the rest of the attack.
+  preconditions: >
+    A principal holding Microsoft.Security/pricings/write (or autoProvisioningSettings/write).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    Microsoft.Security/pricings/write (downgrade to Free) or auto-provisioning/policy disable.
+  operations: [MICROSOFT.SECURITY/PRICINGS/WRITE, MICROSOFT.SECURITY/AUTOPROVISIONINGSETTINGS/WRITE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.SECURITY/PRICINGS/WRITE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "Microsoft.Security/pricings/write (downgrade to Free) or auto-provisioning/policy disable." }
+  analyst:
+    fp_rate: low
+    severity: MEDIUM
+    logic: >
+      Microsoft.Security/pricings/write (downgrade to Free) or auto-provisioning/policy disable;
+      exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: CAPABILITY
+actors: []
+references:
+  - "https://attack.mitre.org/techniques/T1562/001/"
+  - "trends/azure-chokepoint-convergence.md"

@@ -1,0 +1,53 @@
+id: gcp-gcs-bucket-made-public
+name: GCS bucket / object made public
+cloud: gcp
+tactic: impact
+attack_technique: [T1537]
+priority: HIGH
+prevalence: MEDIUM
+difficulty: LOW
+
+chokepoint:
+  technique: >
+    Making storage world-readable requires granting allUsers/allAuthenticatedUsers on the
+    bucket/object IAM policy — an Admin Activity setIamPolicy.
+  preconditions: >
+    A credential holding storage.buckets.setIamPolicy (or objects.setIamPolicy).
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    bindingDeltas ADD allUsers or allAuthenticatedUsers as objectViewer/reader on a bucket
+    not intended to be public.
+  operations: [storage.setIamPermissions, SetIamPolicy]
+
+observability:
+  status: OBSERVABLE
+  log_source: GCP Cloud Audit Log
+  log_class: ADMIN_ACTIVITY
+  signal_field: >
+    protoPayload.authenticationInfo.principalEmail;
+    protoPayload.serviceData.policyDelta.bindingDeltas; protoPayload.resourceName
+  notes: >
+    bindingDeltas in deprecated serviceData may be dropped on export — validate.
+    methodName confidence: storage.setIamPermissions confirmed by convention
+
+detection:
+  research: { fp_rate: high, logic: "storage.setIamPermissions / SetIamPolicy — every occurrence." }
+  hunt:
+    fp_rate: medium
+    logic: >
+      bindingDeltas ADD allUsers or allAuthenticatedUsers as objectViewer/reader on a bucket
+      not intended to be public.
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      bindingDeltas ADD allUsers or allAuthenticatedUsers as objectViewer/reader on a bucket
+      not intended to be public; exclude known-benign automation (allowlist from your
+      baseline).
+
+validation_tier: CAPABILITY
+actors: []
+related: []
+references:
+  - https://www.sysdig.com/blog/suspicious-activity-gcp-audit-logs
+  - "trends/gcp-chokepoint-convergence.md"

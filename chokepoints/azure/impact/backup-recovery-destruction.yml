@@ -1,0 +1,41 @@
+id: azure-backup-recovery-destruction
+name: Backup / recovery destruction
+cloud: azure
+tactic: impact
+attack_technique: [T1490, T1485]
+priority: HIGH
+prevalence: EMERGING
+difficulty: MEDIUM
+
+chokepoint:
+  technique: >
+    Deleting Recovery Services vault items, restore points, snapshots, or removing resource
+    locks / immutability before encryption — the anti-recovery step of cloud ransomware.
+  preconditions: >
+    A principal holding delete on Recovery Services vault items / snapshots / resource locks.
+  attacker_controls: [user agent, source IP, tool, timing]
+  invariant: >
+    backup/restore-point/snapshot delete or lock removal by a non-backup principal, especially
+    in a burst.
+  operations: [MICROSOFT.RECOVERYSERVICES/VAULTS/BACKUPFABRICS/PROTECTIONCONTAINERS/PROTECTEDITEMS/DELETE, MICROSOFT.COMPUTE/SNAPSHOTS/DELETE, MICROSOFT.AUTHORIZATION/LOCKS/DELETE]
+
+observability:
+  status: OBSERVABLE
+  log_source: Azure Activity Log
+  log_class: ACTIVITY_LOG
+
+detection:
+  research: { fp_rate: high, logic: "MICROSOFT.RECOVERYSERVICES/VAULTS/BACKUPFABRICS/PROTECTIONCONTAINERS/PROTECTEDITEMS/DELETE — every occurrence." }
+  hunt: { fp_rate: medium, logic: "backup/restore-point/snapshot delete or lock removal by a non-backup principal, especially in a burst." }
+  analyst:
+    fp_rate: low
+    severity: HIGH
+    logic: >
+      backup/restore-point/snapshot delete or lock removal by a non-backup principal, especially
+      in a burst; exclude known-benign automation (allowlist from your baseline).
+
+validation_tier: INCIDENT
+actors: ["Storm-0501 (Azure ransomware — deletes backups + removes immutability before encrypting)"]
+references:
+  - "https://attack.mitre.org/techniques/T1490/"
+  - "trends/azure-chokepoint-convergence.md"
